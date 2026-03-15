@@ -1,2 +1,6 @@
 streamlit
 fal_client
+deep-translator
+Pillow
+reportlab
+requests
