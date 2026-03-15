@@ -7,18 +7,16 @@ import requests
 from io import BytesIO
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
-import random
 
 # --- KONFIGURACJA ---
-# Upewnij się, że ten klucz jest aktywny na fal.ai
 os.environ["FAL_KEY"] = "cf0a6c98-7933-45df-918d-5757b24e9a30:afc267a3e94340879464bbea2862b40b"
 ADMIN_NICK = "admin"
 ADMIN_PASS = "KDP2026"
 
-st.set_page_config(page_title="KDP Factory Pro 8K - FULL SUITE + Story AI", layout="wide")
+st.set_page_config(page_title="KDP Factory Ultimate 8K", layout="wide")
 translator = GoogleTranslator(source='pl', target='en')
 
-# --- BAZA DANYCH ---
+# --- BAZA DANYCH (Kredyty i Sesja) ---
 if "user_db" not in st.session_state:
     st.session_state["user_db"] = {
         "admin": {"pass": "KDP2026", "credits": 999999, "role": "admin"},
@@ -42,38 +40,34 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # --- GŁÓWNY SILNIK GRAFICZNY ---
-def master_generate(prompt, is_color=False):
+def master_generate(prompt):
     nick = st.session_state["user_nick"]
     if st.session_state["user_db"][nick]["credits"] <= 0:
         st.error("❌ Brak kredytów!")
         return None
     try:
-        # Silnik Flux Schnell dla szybkości i jakości
         handler = fal_client.subscribe("fal-ai/flux/schnell", arguments={"prompt": prompt})
         url = handler['images'][0]['url']
         resp = requests.get(url)
-        
-        # Przetwarzanie obrazu
-        img = Image.open(BytesIO(resp.content))
-        
-        if not is_color:
-            # Konwersja na czarno-biały dla kolorowanek
-            img = img.convert('L')
-            # Poprawa kontrastu dla kolorowanek
-            img = ImageEnhance.Contrast(img).enhance(3.5)
-            
-        # Skalowanie do 8K (LANCZOS)
+        img = Image.open(BytesIO(resp.content)).convert('L')
+        # Skalowanie do 8K dla jakości KDP
         w, h = img.size
         img = img.resize((w*2, h*2), resample=Image.LANCZOS)
-        
-        # Odjęcie kredytu
         if st.session_state["role"] != "admin":
             st.session_state["user_db"][nick]["credits"] -= 1
-            
-        return img
+        return ImageEnhance.Contrast(img).enhance(3.5)
     except Exception as e:
-        st.error(f"⚠️ Błąd API: {e}")
-        return None
+        st.error(f"⚠️ Błąd API: {e}"); return None
+
+# --- NARZĘDZIA SEO I TRENDÓW ---
+def get_amazon_trends():
+    return [
+        "Easter Biblical Stories (High Demand)",
+        "Cozy Little Shops: Bold & Easy",
+        "Celestial Boho Animals",
+        "Victorian Steampunk Fashions",
+        "Kawaii Food with Faces"
+    ]
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -81,12 +75,10 @@ with st.sidebar:
     cred = st.session_state["user_db"][st.session_state['user_nick']]['credits']
     st.write(f"🪙 Kredyty: {'∞' if st.session_state['role'] == 'admin' else cred}")
     
-    # PEŁNA LISTA MODUŁÓW (W TYM NOWA ZAKŁADKA BETA)
     tryb = st.selectbox("Wybierz moduł:", 
                         ["✏️ Generator Kategorii", 
                          "🦁 Niche Finder & SEO", 
                          "📖 Opowieść (Story Mode)", 
-                         "📖 KDP Story AI (Beta)", # NOWA FUNKCJA DLA USA
                          "📸 Zdjęcie na Kontur", 
                          "💬 Forum",
                          "⚖️ Regulamin i Pomoc"])
@@ -97,133 +89,93 @@ with st.sidebar:
     if st.button("🚪 Wyloguj"):
         st.session_state["authenticated"] = False; st.rerun()
 
-# --- LOGIKA MODUŁÓW (WSZYSTKIE NARZĘDZIA) ---
+# --- MODUŁY ---
 
 if tryb == "✏️ Generator Kategorii":
     st.header("🎨 Szybki Generator 8K")
     kat = st.radio("Styl:", ["Dowolny", "Geometria", "Pejzaż", "Przyroda", "Architektura"], horizontal=True)
-    opis = st.text_input("Opis (co narysować?):")
+    opis = st.text_input("Co narysować?")
     if st.button("GENERUJ"):
-        with st.spinner("Pracuję..."):
+        with st.spinner("AI rysuje Twoją stronę..."):
             eng = translator.translate(opis)
             p = f"Coloring book page, {kat if kat != 'Dowolny' else ''} {eng}, 8k, black and white, clean bold lines, no shading"
-            img = master_generate(p, is_color=False)
+            img = master_generate(p)
             if img:
                 buf = BytesIO(); img.save(buf, format="PNG")
                 st.session_state['pdf_basket'].append(buf.getvalue())
                 st.image(img)
 
 elif tryb == "🦁 Niche Finder & SEO":
-    st.header("🦁 Niche Blaster - Analiza i Generowanie")
+    st.header("🦁 Niche Blaster - Znajdź i Zdominuj Niszcę")
     if st.button("🔍 Skanuj Trendy Amazon Marzec 2026"):
-        # Trendy na Marzec 2026 oparte o aktualną analizę rynku
-        trends = [
-            "Easter Biblical Stories (Seasonally High)",
-            "Bold & Easy: Cozy Little Shops",
-            "Celestial Boho Animals",
-            "Victorian Steampunk Fashions",
-            "Kawaii Food with Expressions"
-        ]
-        st.write("🔥 **Trendy USA/UK:**")
+        trends = get_amazon_trends()
+        st.write("🔥 **Trendy na dziś (USA/UK):**")
         for t in trends: st.code(t)
     
-    n_input = st.text_input("Wpisz wybraną niszcę:")
+    n_input = st.text_input("Wybrana nisza (np. Kawaii Food):")
     if n_input:
-        st.success(f"Tytuł: {n_input.capitalize()} Coloring Book for Adults")
-        st.write(f"Słowa kluczowe: {n_input}, coloring book, kdp, amazon, adult coloring, meditation, 2026 trends")
-        ile_n = st.number_input("Ile grafik wygenerować?", 1, 50, 5)
+        st.info(f"SEO Tytuł: {n_input.capitalize()} Coloring Book for Adults")
+        ile_n = st.number_input("Ile grafik wygenerować?", 1, 50, 10)
         if st.button("🚀 Generuj Serię"):
             bar = st.progress(0)
             for i in range(ile_n):
-                img = master_generate(f"Coloring page, {translator.translate(n_input)}, 8k, unique, bold lines", is_color=False)
+                img = master_generate(f"Coloring page, {translator.translate(n_input)}, 8k, unique, bold lines")
                 if img:
                     buf = BytesIO(); img.save(buf, format="PNG")
                     st.session_state['pdf_basket'].append(buf.getvalue())
                 bar.progress((i+1)/ile_n)
 
 elif tryb == "📖 Opowieść (Story Mode)":
-    st.header("📖 Story Mode - Cała Książka (Czarno-Biała)")
-    historia = st.text_area("Opisz fabułę książki:")
-    ile_s = st.number_input("Ile stron?", 5, 50, 10)
-    if st.button("🔥 GENERUJ CAŁOŚĆ"):
+    st.header("📖 Story Mode - Tworzenie Całej Historii")
+    historia = st.text_area("Opisz o czym ma być książka:")
+    ile_s = st.number_input("Liczba stron:", 5, 50, 10)
+    if st.button("🔥 GENERUJ KSIĄŻKĘ"):
         bar_s = st.progress(0)
-        eng_h = translator.translate(historia)
         for i in range(ile_s):
-            img = master_generate(f"Step {i+1} of {ile_s}: {eng_h}. Coloring page, 8k, bold lines", is_color=False)
+            img = master_generate(f"Page {i+1} of {ile_s}: {translator.translate(historia)}. Coloring page, 8k, consistent style")
             if img:
                 buf = BytesIO(); img.save(buf, format="PNG")
                 st.session_state['pdf_basket'].append(buf.getvalue())
             bar_s.progress((i+1)/ile_s)
 
-elif tryb == "📖 KDP Story AI (Beta)":
-    st.header("📖 KDP Story AI (Beta) - Spersonalizowane Bajki w Kolorze")
-    st.info("Ta funkcja generuje pełne, spójne kolorowe ilustracje gotowe do druku bajek w USA!")
-    
-    imię = st.text_input("Imię dziecka (główny bohater):")
-    opis_d = st.text_input("Opis dziecka (np. chłopiec, blond włosy, czerwona czapka):")
-    hist_d = st.text_area("Opisz fabułę bajki (np. Podróż na Marsa z psem Bongo):")
-    ile_d = st.number_input("Ile stron bajki?", 5, 30, 10)
-    
-    if imię and opis_d and hist_d:
-        st.success(f"✅ Tytuł: {imię.capitalize()}'s Magical Adventure")
-        st.write(f"**Opis KDP:** A personalized, illustrated bedtime story featuring {imię}. Perfect gift for children aged 3-7. 2026 Edition.")
-        
-        if st.button("🚀 GENERUJ BAJKĘ DLA DZIEKCKA"):
-            bar_d = st.progress(0)
-            eng_h_d = translator.translate(hist_d)
-            # Unikalny seed dla spójności postaci
-            seed = random.randint(0, 999999)
-            
-            for i in range(ile_d):
-                # Specjalny prompt dla spójności postaci i stylu bajkowego
-                p_d = f"Step {i+1} of {ile_d} in the story of {imię} ({opis_d}). {eng_h_d}. Full color children's book illustration, whimsical style, soft lighting, vibrant colors, clear character focus, consistent face and clothing for {imię}. {seed}"
-                img = master_generate(p_d, is_color=True)
-                if img:
-                    buf = BytesIO(); img.save(buf, format="PNG")
-                    st.session_state['pdf_basket'].append(buf.getvalue())
-                bar_d.progress((i+1)/ile_d)
-            st.success("Bajka gotowa! Pobierz PDF poniżej.")
-
 elif tryb == "📸 Zdjęcie na Kontur":
-    st.header("📸 Twoje zdjęcie -> Bezstratny Szkic 8K")
-    f = st.file_uploader("Wgraj plik (JPG/PNG):", type=['png', 'jpg'])
-    if f and st.button("KONWERTUJ NA KONTUR"):
-        with st.spinner("Przetwarzam zdjęcie na bezstratny kontur..."):
+    st.header("📸 Bezstratna Konwersja na Szkic")
+    f = st.file_uploader("Wgraj zdjęcie:", type=['png', 'jpg'])
+    if f and st.button("KONWERTUJ"):
+        with st.spinner("Przetwarzam na linie..."):
             img = Image.open(f).convert('L')
+            # Algorytm bezstratny krawędzi
             img_blurred = img.filter(ImageFilter.GaussianBlur(radius=1))
             img_edges = img_blurred.filter(ImageFilter.FIND_EDGES)
             img_final = ImageOps.invert(img_edges)
-            img_final = ImageEnhance.Contrast(img_final).enhance(3.0)
-            
-            w, h = img_final.size
-            img_final_res = img_final.resize((w*2, h*2), resample=Image.LANCZOS)
-
-            buf = BytesIO(); img_final_res.save(buf, format="PNG")
+            img_final = ImageEnhance.Contrast(img_final).enhance(2.5)
+            # Zapis do koszyka
+            buf = BytesIO(); img_final.save(buf, format="PNG")
             st.session_state['pdf_basket'].append(buf.getvalue())
-            st.image(img_final_res, caption="Bezstratny kontur gotowy!")
+            st.image(img_final, caption="Gotowe do kolorowania!")
 
 elif tryb == "💬 Forum":
     st.header("💬 Forum Społeczności")
-    wiad = st.text_input("Wiadomość:")
+    wiad = st.text_input("Napisz do innych twórców:")
     if st.button("Wyślij"):
         st.session_state["posts"].insert(0, {"u": st.session_state["user_nick"], "m": wiad})
         st.rerun()
     for p in st.session_state["posts"]: st.info(f"**{p['u']}**: {p['m']}")
 
 elif tryb == "⚖️ Regulamin i Pomoc":
-    st.header("⚖️ Dokumenty Prawne i Pomoc")
-    tab1, tab2 = st.tabs(["Regulamin", "Polityka Prywatności"])
-    with tab1: st.write("Regulamin Twojej aplikacji... (Tu wklej tekst dla Stripe)")
-    with tab2: st.write("Polityka prywatności... (Tu wklej tekst dla Stripe)")
+    st.header("⚖️ Dokumenty Prawne")
+    t1, t2 = st.tabs(["Regulamin", "Polityka Prywatności"])
+    with t1: st.write("Regulamin Twojej aplikacji...")
+    with t2: st.write("Polityka prywatności...")
 
-# --- EKSPORT PDF ---
+# --- PDF EXPORT ---
 if st.session_state['pdf_basket']:
     st.divider()
-    if st.button("📥 POBIERZ PDF DO AMAZON KDP"):
+    if st.button("📥 POBIERZ PDF DLA AMAZON KDP"):
         out = BytesIO()
         pdf = canvas.Canvas(out, pagesize=(8.5*inch, 11*inch))
         for d in st.session_state['pdf_basket']:
             pdf.drawImage(BytesIO(d), 0.5*inch, 1*inch, width=7.5*inch, height=9*inch)
-            pdf.showPage(); pdf.showPage() # Jedna pusta strona (standard KDP)
+            pdf.showPage(); pdf.showPage() # Dodaje pustą stronę z tyłu
         pdf.save()
-        st.download_button("Zapisz plik PDF", out.getvalue(), "projekt_kdp_8k.pdf")
+        st.download_button("Zapisz PDF", out.getvalue(), "moje_kdp_8k.pdf")
