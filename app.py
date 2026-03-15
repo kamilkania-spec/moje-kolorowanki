@@ -141,4 +141,31 @@ elif tryb == "📸 Zdjęcie na Kontur":
         with st.spinner("Przetwarzam..."):
             img_pil = Image.open(f).convert('L')
             # Ulepszony algorytm bezstratnego konturu
-            img_blurred = img_pil.filter(ImageFilter.GaussianBlur(radius=1
+            img_blurred = img_pil.filter(ImageFilter.GaussianBlur(radius=1))
+            img_edges = img_blurred.filter(ImageFilter.FIND_EDGES)
+            img_final = ImageOps.invert(img_edges) # Teraz zadziała!
+            img_final = ImageEnhance.Contrast(img_final).enhance(2.5)
+            
+            buf = BytesIO(); img_final.save(buf, format="PNG")
+            st.session_state['pdf_basket'].append(buf.getvalue())
+            st.image(img_final)
+
+elif tryb == "💬 Forum":
+    st.header("💬 Forum")
+    wiad = st.text_input("Wiadomość:")
+    if st.button("Wyślij"):
+        st.session_state["posts"].insert(0, {"u": st.session_state["user_nick"], "m": wiad})
+        st.rerun()
+    for p in st.session_state["posts"]: st.info(f"**{p['u']}**: {p['m']}")
+
+# --- EKSPORT PDF ---
+if st.session_state['pdf_basket']:
+    st.divider()
+    if st.button("📥 POBIERZ PDF"):
+        out = BytesIO()
+        pdf = canvas.Canvas(out, pagesize=(8.5*inch, 11*inch))
+        for d in st.session_state['pdf_basket']:
+            pdf.drawImage(BytesIO(d), 0.5*inch, 1*inch, width=7.5*inch, height=9*inch)
+            pdf.showPage(); pdf.showPage()
+        pdf.save()
+        st.download_button("Zapisz plik PDF", out.getvalue(), "projekt_kdp_8k.pdf")
