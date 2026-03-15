@@ -1,0 +1,2 @@
+streamlit
+fal_client
