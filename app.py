@@ -8,7 +8,6 @@ from io import BytesIO
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 import random
-import base64
 
 # --- KONFIGURACJA ---
 # Upewnij się, że ten klucz jest aktywny na fal.ai
@@ -16,7 +15,7 @@ os.environ["FAL_KEY"] = "cf0a6c98-7933-45df-918d-5757b24e9a30:afc267a3e943408794
 ADMIN_NICK = "admin"
 ADMIN_PASS = "KDP2026"
 
-st.set_page_config(page_title="KDP Factory Pro 8K - FULL SUITE + Story AI (Photo)", layout="wide")
+st.set_page_config(page_title="KDP Factory Pro 8K - FULL SUITE + Story AI", layout="wide")
 translator = GoogleTranslator(source='pl', target='en')
 
 # --- BAZA DANYCH ---
@@ -43,19 +42,14 @@ if not st.session_state["authenticated"]:
     st.stop()
 
 # --- GŁÓWNY SILNIK GRAFICZNY ---
-def master_generate(prompt, is_color=False, image_url=None):
+def master_generate(prompt, is_color=False):
     nick = st.session_state["user_nick"]
     if st.session_state["user_db"][nick]["credits"] <= 0:
         st.error("❌ Brak kredytów!")
         return None
     try:
-        # Konfiguracja argumentów dla API fal.ai (Flux)
-        arguments = {"prompt": prompt}
-        if image_url:
-            arguments["image_url"] = image_url # Dodanie obrazu jako inspiracji (ControlNet)
-
-        # Wywołanie API
-        handler = fal_client.subscribe("fal-ai/flux/schnell", arguments=arguments)
+        # Silnik Flux Schnell dla szybkości i jakości
+        handler = fal_client.subscribe("fal-ai/flux/schnell", arguments={"prompt": prompt})
         url = handler['images'][0]['url']
         resp = requests.get(url)
         
@@ -65,6 +59,7 @@ def master_generate(prompt, is_color=False, image_url=None):
         if not is_color:
             # Konwersja na czarno-biały dla kolorowanek
             img = img.convert('L')
+            # Poprawa kontrastu dla kolorowanek
             img = ImageEnhance.Contrast(img).enhance(3.5)
             
         # Skalowanie do 8K (LANCZOS)
@@ -86,11 +81,12 @@ with st.sidebar:
     cred = st.session_state["user_db"][st.session_state['user_nick']]['credits']
     st.write(f"🪙 Kredyty: {'∞' if st.session_state['role'] == 'admin' else cred}")
     
+    # PEŁNA LISTA MODUŁÓW (W TYM NOWA ZAKŁADKA BETA)
     tryb = st.selectbox("Wybierz moduł:", 
                         ["✏️ Generator Kategorii", 
                          "🦁 Niche Finder & SEO", 
                          "📖 Opowieść (Story Mode)", 
-                         "📖 KDP Story AI (Beta)", 
+                         "📖 KDP Story AI (Beta)", # NOWA FUNKCJA DLA USA
                          "📸 Zdjęcie na Kontur", 
                          "💬 Forum",
                          "⚖️ Regulamin i Pomoc"])
@@ -120,6 +116,7 @@ if tryb == "✏️ Generator Kategorii":
 elif tryb == "🦁 Niche Finder & SEO":
     st.header("🦁 Niche Blaster - Analiza i Generowanie")
     if st.button("🔍 Skanuj Trendy Amazon Marzec 2026"):
+        # Trendy na Marzec 2026 oparte o aktualną analizę rynku
         trends = [
             "Easter Biblical Stories (Seasonally High)",
             "Bold & Easy: Cozy Little Shops",
@@ -159,52 +156,33 @@ elif tryb == "📖 Opowieść (Story Mode)":
             bar_s.progress((i+1)/ile_s)
 
 elif tryb == "📖 KDP Story AI (Beta)":
-    st.header("📖 KDP Story AI (Beta) - Spersonalizowane Bajki z Twojego Zdjęcia")
-    st.info("Ta funkcja generuje pełne, spójne kolorowe ilustracje gotowe do druku bajek w USA, inspirując się wgranym zdjęciem!")
-    
-    # 📸 NOWE: Wgrywanie zdjęcia dziecka do interpretacji
-    f_photo = st.file_uploader("📸 Wgraj zdjęcie dziecka (do interpretacji AI):", type=['png', 'jpg'])
+    st.header("📖 KDP Story AI (Beta) - Spersonalizowane Bajki w Kolorze")
+    st.info("Ta funkcja generuje pełne, spójne kolorowe ilustracje gotowe do druku bajek w USA!")
     
     imię = st.text_input("Imię dziecka (główny bohater):")
-    postać = st.selectbox("W kogo zamienić dziecko?", ["Misia", "Superbohatera", "Robota", "Królewnę/Księcia", "Dowolną postać tekstową"])
-    if postać == "Dowolną postać tekstową":
-        postać_d = st.text_input("Opisz postać (np. Mały astronauta w niebieskim skafandrze):")
-    else:
-        postać_d = postać
-        
+    opis_d = st.text_input("Opis dziecka (np. chłopiec, blond włosy, czerwona czapka):")
     hist_d = st.text_area("Opisz fabułę bajki (np. Podróż na Marsa z psem Bongo):")
     ile_d = st.number_input("Ile stron bajki?", 5, 30, 10)
     
-    if imię and f_photo and hist_d:
+    if imię and opis_d and hist_d:
         st.success(f"✅ Tytuł: {imię.capitalize()}'s Magical Adventure")
+        st.write(f"**Opis KDP:** A personalized, illustrated bedtime story featuring {imię}. Perfect gift for children aged 3-7. 2026 Edition.")
         
-        if st.button("🚀 GENERUJ BAJKĘ DLA DZIEKCKA (Z FOTKI)"):
+        if st.button("🚀 GENERUJ BAJKĘ DLA DZIEKCKA"):
             bar_d = st.progress(0)
             eng_h_d = translator.translate(hist_d)
+            # Unikalny seed dla spójności postaci
             seed = random.randint(0, 999999)
             
-            # Przetwarzanie zdjęcia dziecka na URL (Base64) dla API
-            try:
-                # Wczytanie obrazu i konwersja do Base64
-                photo_bytes = f_photo.read()
-                photo_base64 = base64.b64encode(photo_bytes).decode('utf-8')
-                photo_url = f"data:{f_photo.type};base64,{photo_base64}"
-                
-                for i in range(ile_d):
-                    # Specjalny prompt dla spójności postaci i stylu bajkowego, inspirując się zdjęciem
-                    # Dodano instrukcję: "based on face from the photo"
-                    p_d = f"Step {i+1} of {ile_d} in the story of {imię}. The main character is a {postać_d}, whose face is based on the provided photo of the child. The {postać_d} looks consistent with the child's features from the photo on every page. Plot: {eng_h_d}. Whimsical children's book illustration, soft lighting, vibrant colors, clear focus. {seed}"
-                    
-                    # Generowanie z przekazaniem zdjęcia jako ControlNet/inspiracja
-                    img = master_generate(p_d, is_color=True, image_url=photo_url)
-                    
-                    if img:
-                        buf = BytesIO(); img.save(buf, format="PNG")
-                        st.session_state['pdf_basket'].append(buf.getvalue())
-                    bar_d.progress((i+1)/ile_d)
-                st.success("Bajka gotowa! Pobierz PDF poniżej.")
-            except Exception as e:
-                st.error(f"⚠️ Błąd podczas przetwarzania zdjęcia: {e}")
+            for i in range(ile_d):
+                # Specjalny prompt dla spójności postaci i stylu bajkowego
+                p_d = f"Step {i+1} of {ile_d} in the story of {imię} ({opis_d}). {eng_h_d}. Full color children's book illustration, whimsical style, soft lighting, vibrant colors, clear character focus, consistent face and clothing for {imię}. {seed}"
+                img = master_generate(p_d, is_color=True)
+                if img:
+                    buf = BytesIO(); img.save(buf, format="PNG")
+                    st.session_state['pdf_basket'].append(buf.getvalue())
+                bar_d.progress((i+1)/ile_d)
+            st.success("Bajka gotowa! Pobierz PDF poniżej.")
 
 elif tryb == "📸 Zdjęcie na Kontur":
     st.header("📸 Twoje zdjęcie -> Bezstratny Szkic 8K")
@@ -249,4 +227,3 @@ if st.session_state['pdf_basket']:
             pdf.showPage(); pdf.showPage() # Jedna pusta strona (standard KDP)
         pdf.save()
         st.download_button("Zapisz plik PDF", out.getvalue(), "projekt_kdp_8k.pdf")
-    
