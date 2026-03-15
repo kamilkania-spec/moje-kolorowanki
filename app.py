@@ -249,3 +249,4 @@ if st.session_state['pdf_basket']:
             pdf.showPage(); pdf.showPage() # Jedna pusta strona (standard KDP)
         pdf.save()
         st.download_button("Zapisz plik PDF", out.getvalue(), "projekt_kdp_8k.pdf")
+    
