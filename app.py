@@ -1,117 +1,90 @@
 import streamlit as st
-import os
-import fal_client
+import os, fal_client, requests, random, base64
 from deep_translator import GoogleTranslator
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
-import requests
 from io import BytesIO
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 
-# --- KONFIGURACJA ---
 os.environ["FAL_KEY"] = "cf0a6c98-7933-45df-918d-5757b24e9a30:afc267a3e94340879464bbea2862b40b"
-ADMIN_NICK = "admin"
-ADMIN_PASS = "KDP2026"
-
-st.set_page_config(page_title="KDP Factory Ultimate - Ready for Payments", layout="wide")
+st.set_page_config(page_title="KDP Design Studio MASTER", layout="wide")
 translator = GoogleTranslator(source='pl', target='en')
 
-# --- BAZA DANYCH ---
-if "user_db" not in st.session_state:
-    st.session_state["user_db"] = {
-        "admin": {"pass": "KDP2026", "credits": 999999, "role": "admin"},
-        "tester": {"pass": "KDP123", "credits": 50, "role": "user"}
-    }
 if "pdf_basket" not in st.session_state: st.session_state["pdf_basket"] = []
-if "posts" not in st.session_state: st.session_state["posts"] = []
 if "authenticated" not in st.session_state: st.session_state["authenticated"] = False
 
-# --- LOGOWANIE ---
 if not st.session_state["authenticated"]:
-    st.title("🔐 KDP Factory Login")
-    u = st.text_input("Nick:")
-    p = st.text_input("Hasło:", type="password")
-    if st.button("Zaloguj się"):
-        if u in st.session_state["user_db"] and st.session_state["user_db"][u]["pass"] == p:
+    st.title("🔐 KDP Studio Login")
+    u, p = st.text_input("Login:"), st.text_input("Hasło:", type="password")
+    if st.button("Zaloguj"):
+        if u == "admin" and p == "KDP2026":
             st.session_state["authenticated"] = True
-            st.session_state["user_nick"] = u
-            st.session_state["role"] = st.session_state["user_db"][u]["role"]
             st.rerun()
     st.stop()
 
-# --- SIDEBAR ---
+def master_generate(prompt, is_color=False, image_url=None, seed=None):
+    try:
+        cur_seed = seed if seed is not None else random.randint(0, 10**9)
+        # POPRAWIONA JAKOŚĆ: Tagi wymuszające gładkość i brak pikselozy
+        clean_p = f"{prompt}, professional coloring book line art, clean continuous black contours, pure white background, zero grayscale, high-definition, 8k"
+        args = {"prompt": clean_p, "image_size": "square_hd", "seed": cur_seed}
+        if image_url: args["image_url"] = image_url
+        res = fal_client.subscribe("fal-ai/flux/schnell", arguments=args)
+        img = Image.open(BytesIO(requests.get(res['images'][0]['url']).content))
+        if not is_color:
+            img = img.convert('L')
+            # Balans kontrastu: 2.5 zamiast 4.0 - koniec z poszarpanymi liniami
+            img = ImageEnhance.Contrast(img).enhance(2.5)
+            img = img.filter(ImageFilter.SMOOTH_MORE).filter(ImageFilter.SHARPEN)
+        return img.resize((img.size[0]*2, img.size[1]*2), Image.LANCZOS)
+    except Exception as e:
+        st.error(f"Błąd: {e}"); return None
+
 with st.sidebar:
-    st.title(f"👤 {st.session_state['user_nick']}")
-    cred = st.session_state["user_db"][st.session_state['user_nick']]['credits']
-    st.write(f"🪙 Kredyty: {'∞' if st.session_state['role'] == 'admin' else cred}")
-    
-    tryb = st.selectbox("Wybierz moduł:", 
-                        ["✏️ Generator Kategorii", 
-                         "🦁 Niche Finder & SEO", 
-                         "📖 Opowieść (Story Mode)", 
-                         "📸 Zdjęcie na Kontur", 
-                         "💬 Forum",
-                         "⚖️ Regulamin i Pomoc"]) # NOWA ZAKŁADKA
-    
-    st.divider()
-    if st.button("🗑️ Wyczyść Projekt"):
-        st.session_state['pdf_basket'] = []; st.rerun()
-    if st.button("🚪 Wyloguj"):
-        st.session_state["authenticated"] = False; st.rerun()
+    st.title("🖌️ Studio")
+    tryb = st.selectbox("Narzędzie:", ["🎨 Generator Kolekcji", "🦁 Niche Finder", "📖 Foto-Bajka AI", "📸 Kontur"])
+    if st.button("🗑️ Wyczyść projekt"): st.session_state['pdf_basket'] = []; st.rerun()
 
-# --- MODUŁY (STARE FUNKCJE + BEZSTRATNE ZDJĘCIA) ---
+if tryb == "🎨 Generator Kolekcji":
+    st.header("🎨 Generator Nowej Kolekcji (Styl iColoring)")
+    c1, c2, c3 = st.columns(3)
+    kat = c1.selectbox("Kategoria:", ["Natura", "Zwierzęta", "Mandale", "Architektura"])
+    styl = c2.selectbox("Styl:", ["Fine", "Bold & Easy", "Zentangle"])
+    ile = c3.slider("Liczba stron:", 1, 40, 20)
+    temat = st.text_input("Główny temat:")
+    if st.button("🔥 GENERUJ SERIĘ"):
+        bar, status, grid = st.progress(0), st.empty(), st.columns(4)
+        k_m = {"Natura": "nature scenery", "Zwierzęta": "wildlife", "Mandale": "mandala", "Architektura": "architecture"}
+        s_m = {"Fine": "intricate thin lines", "Bold & Easy": "bold thick lines", "Zentangle": "ornamental"}
+        for i in range(ile):
+            status.info(f"Tworzę {i+1}/{ile}...")
+            # Unikalność: Losowy element w każdym prompcie
+            p = f"{k_m[kat]}, {s_m[styl]}, {translator.translate(temat)}, variation {random.random()}"
+            img = master_generate(p)
+            if img:
+                buf = BytesIO(); img.save(buf, format="PNG"); st.session_state['pdf_basket'].append(buf.getvalue())
+                with grid[i % 4]: st.image(img, use_container_width=True)
+            bar.progress((i+1)/ile)
+        status.success("Kolekcja gotowa!")
 
-if tryb == "✏️ Generator Kategorii":
-    st.header("🎨 Szybki Generator 8K")
-    kat = st.radio("Styl:", ["Dowolny", "Geometria", "Pejzaż", "Przyroda", "Architektura"], horizontal=True)
-    opis = st.text_input("Co narysować?")
-    if st.button("GENERUJ"):
-        with st.spinner("Pracuję..."):
-            eng = translator.translate(opis)
-            # Silnik generujący z poprzednich wersji...
-            # [Tutaj master_generate z Twoimi parametrami]
-            st.info("Podepnij API na fal.ai, aby ruszyć z generowaniem!")
+elif tryb == "🦁 Niche Finder":
+    st.header("🦁 Analiza Rynku")
+    if st.button("🔍 Skanuj Trendy"): st.success("Trendy 2026: Bold & Easy Hygge, Easter Gnomes, Celestial Cats")
 
-elif tryb == "📸 Zdjęcie na Kontur":
-    st.header("📸 Bezstratny Kontur")
-    f = st.file_uploader("Wgraj zdjęcie:", type=['png', 'jpg'])
-    if f and st.button("KONWERTUJ"):
-        img = Image.open(f).convert('L')
-        # Algorytm bezstratny
-        img_blurred = img.filter(ImageFilter.GaussianBlur(radius=1))
-        img_edges = img_blurred.filter(ImageFilter.FIND_EDGES)
-        img_final = ImageOps.invert(img_edges)
-        st.image(img_final, caption="Bezstratny kontur gotowy!")
+elif tryb == "📖 Foto-Bajka AI":
+    st.header("📖 Personalizacja")
+    f = st.file_uploader("Zdjęcie:", type=['jpg', 'png'])
+    if f and st.button("Generuj"):
+        url = f"data:{f.type};base64,{base64.b64encode(f.read()).decode()}"
+        img = master_generate("consistent character, coloring book", image_url=url, seed=42)
+        st.image(img)
 
-elif tryb == "🦁 Niche Finder & SEO":
-    st.header("🦁 Trendy Amazon Marzec 2026")
-    st.write("1. Easter Biblical Stories")
-    st.write("2. Celestial Boho Animals")
-    st.write("... i inne gorące nisze!")
-
-elif tryb == "⚖️ Regulamin i Pomoc":
-    st.header("⚖️ Dokumenty Prawne")
-    
-    tab1, tab2 = st.tabs(["Regulamin Serwisu", "Polityka Prywatności"])
-    
-    with tab1:
-        st.markdown("""
-        ### Regulamin Serwisu KDP Factory
-        1. **Usługi:** Serwis świadczy usługi generowania grafik AI w formie kolorowanek.
-        2. **Kredyty:** Zakupione kredyty nie podlegają zwrotowi po ich wykorzystaniu do wygenerowania grafiki.
-        3. **Licencja:** Użytkownik otrzymuje prawo do komercyjnego wykorzystania grafik na platformie Amazon KDP.
-        4. **Płatności:** Wszystkie płatności realizowane są przez operatora Stripe.
-        """)
-        
-    with tab2:
-        st.markdown("""
-        ### Polityka Prywatności
-        1. **Dane:** Przetwarzamy Twój adres e-mail i nick w celu świadczenia usługi.
-        2. **Pliki:** Nie przechowujemy Twoich zdjęć na naszych serwerach po zakończeniu sesji.
-        3. **Bezpieczeństwo:** Dane płatnicze są procesowane wyłącznie przez Stripe i nie są widoczne dla administratora.
-        """)
-
-# --- PDF ---
 if st.session_state['pdf_basket']:
-    if st.button("📥 POBIERZ PDF"):
-        st.success("Plik gotowy do Amazon KDP!")
+    st.divider()
+    if st.button("📥 POBIERZ PDF (8.5x11)"):
+        out = BytesIO(); pdf = canvas.Canvas(out, pagesize=(8.5*inch, 11*inch))
+        for d in st.session_state['pdf_basket']:
+            pdf.drawImage(BytesIO(d), 0.75*inch, 1*inch, width=7*inch, height=9*inch)
+            pdf.showPage(); pdf.showPage()
+        pdf.save()
+        st.download_button("💾 Pobierz Plik", out.getvalue(), "KDP_MASTER.pdf")
