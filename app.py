@@ -13,7 +13,7 @@ import base64
 # --- KONFIGURACJA ---
 os.environ["FAL_KEY"] = "cf0a6c98-7933-45df-918d-5757b24e9a30:afc267a3e94340879464bbea2862b40b"
 
-st.set_page_config(page_title="KDP Factory Pro 8K - FULL SUITE", layout="wide")
+st.set_page_config(page_title="KDP Factory Pro - iColoring Style", layout="wide")
 translator = GoogleTranslator(source='pl', target='en')
 
 # --- BAZA DANYCH ---
@@ -23,12 +23,11 @@ if "user_db" not in st.session_state:
         "tester": {"pass": "KDP123", "credits": 50, "role": "user"}
     }
 if "pdf_basket" not in st.session_state: st.session_state["pdf_basket"] = []
-if "posts" not in st.session_state: st.session_state["posts"] = []
 if "authenticated" not in st.session_state: st.session_state["authenticated"] = False
 
 # --- LOGOWANIE ---
 if not st.session_state["authenticated"]:
-    st.title("🔐 KDP Factory Login")
+    st.title("✨ KDP Factory: Design Studio")
     u = st.text_input("Nick:")
     p = st.text_input("Hasło:", type="password")
     if st.button("Zaloguj się"):
@@ -39,119 +38,108 @@ if not st.session_state["authenticated"]:
             st.rerun()
     st.stop()
 
-# --- SILNIK GRAFICZNY PRO Z OBSŁUGĄ SEED I ZDJĘĆ ---
-def master_generate(prompt, is_color=False, image_url=None, seed=None):
-    nick = st.session_state["user_nick"]
-    if st.session_state["user_db"][nick]["credits"] <= 0:
-        st.error("❌ Brak kredytów!")
-        return None
-    
-    status_msg = st.empty()
+# --- SILNIK GRAFICZNY PRO (iColoring Optimized) ---
+def master_generate(prompt, seed=None):
     try:
-        status_msg.info("⏳ Łączę z serwerem KDP 8K...")
         gen_seed = seed if seed is not None else random.randint(0, 9999999)
+        # Optymalizacja pod czyste linie icoloring.ai
+        clean_prompt = f"{prompt}, high quality line art, sharp edges, pure white background, zero grayscale, professional coloring book style"
         
-        arguments = {"prompt": prompt, "image_size": "square_hd", "seed": gen_seed}
-        if image_url: arguments["image_url"] = image_url
-
+        arguments = {"prompt": clean_prompt, "image_size": "square_hd", "seed": gen_seed}
         handler = fal_client.subscribe("fal-ai/flux/schnell", arguments=arguments)
-        status_msg.info(f"🎨 AI tworzy unikalną stronę (Seed: {gen_seed})...")
-        
         url = handler['images'][0]['url']
         resp = requests.get(url)
         img = Image.open(BytesIO(resp.content))
         
-        if not is_color:
-            img = img.convert('L')
-            img = ImageEnhance.Contrast(img).enhance(3.8)
-            
+        # Konwersja na czysty kontur
+        img = img.convert('L')
+        img = ImageEnhance.Contrast(img).enhance(4.0)
+        
+        # Skalowanie 8K
         w, h = img.size
         img = img.resize((w*2, h*2), resample=Image.LANCZOS)
-        
-        if st.session_state["role"] != "admin":
-            st.session_state["user_db"][nick]["credits"] -= 1
         return img
     except Exception as e:
-        st.error(f"⚠️ Błąd: {e}")
+        st.error(f"⚠️ Błąd AI: {e}")
         return None
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.title(f"👤 {st.session_state['user_nick']}")
-    st.write(f"🪙 Kredyty: {'∞' if st.session_state['role'] == 'admin' else st.session_state['user_db'][st.session_state['user_nick']]['credits']}")
-    
-    tryb = st.selectbox("WYBIERZ MODUŁ:", 
-                        ["🚀 HURTOWA PRODUKCJA (20+ stron)", 
-                         "🦁 NICHE FINDER & SEO", 
-                         "📖 KDP STORY AI (Foto-Bajka)", 
-                         "📖 STORY MODE (Książka Cz-B)",
-                         "📸 ZDJĘCIE NA KONTUR 8K", 
-                         "💬 FORUM TWÓRCÓW",
-                         "⚖️ REGULAMIN I POMOC"])
-    
+    st.title(f"Studio: {st.session_state['user_nick']}")
+    st.write(f"🪙 Credits: {'∞' if st.session_state['role'] == 'admin' else st.session_state['user_db'][st.session_state['user_nick']]['credits']}")
     st.divider()
-    if st.button("🗑️ CZYŚĆ PROJEKT"):
+    if st.button("🗑️ Wyczysc sesje"):
         st.session_state['pdf_basket'] = []; st.rerun()
 
-# --- LOGIKA MODUŁÓW ---
+# --- INTERFEJS W STYLU ICOLORING.AI ---
+st.title("🎨 Create Your Masterpiece")
+st.subheader("Select Category & Bulk Generate")
 
-if tryb == "🚀 HURTOWA PRODUKCJA (20+ stron)":
-    st.header("🚀 Hurtowa Produkcja Książki (Format 8.5x11)")
-    temat = st.text_input("Temat (np. Mandale, Koty, Kwiaty):")
-    ile = st.number_input("Liczba stron:", 1, 100, 20)
-    if st.button("🔥 URUCHOM HURTOWĄ PRODUKCJĘ"):
+# Wizualny wybór kategorii
+col_cat1, col_cat2, col_cat3 = st.columns(3)
+with col_cat1:
+    cat = st.selectbox("Category:", ["🌿 Nature & Plants", "🐾 Animals", "💠 Mandalas"])
+with col_cat2:
+    style_type = st.selectbox("Style:", ["Fine Lines (Detailed)", "Bold & Easy", "Zentangle"])
+with col_cat3:
+    count = st.slider("Pages to generate:", 1, 50, 20)
+
+prompt_input = st.text_input("What's on your mind? (e.g. 'cat in a garden', 'mystic owl'):")
+
+# --- PROMPT MAPPING ---
+cat_map = {
+    "🌿 Nature & Plants": "botanical illustrations, garden scenes, forest landscapes",
+    "🐾 Animals": "highly detailed animals, wildlife, cute creature portraits",
+    "💠 Mandalas": "intricate mandalas, geometric patterns, sacred symmetry"
+}
+
+style_map = {
+    "Fine Lines (Detailed)": "extremely intricate, thin lines, complex patterns",
+    "Bold & Easy": "bold thick lines, simple shapes, easy to color",
+    "Zentangle": "zen doodle, repetitive patterns, ornamental"
+}
+
+if st.button("🔥 START BULK GENERATION (KDP READY)"):
+    if not prompt_input:
+        st.warning("Please describe your idea first!")
+    else:
         bar = st.progress(0)
-        wariacje = ["intricate", "geometric", "floral", "swirls", "nature", "abstract"]
-        for i in range(ile):
-            v = random.choice(wariacje)
-            p = f"Professional coloring page, {translator.translate(temat)}, {v} style, 8k, black and white, bold lines, white background"
+        status = st.empty()
+        
+        eng_p = translator.translate(prompt_input)
+        final_base_prompt = f"{cat_map[cat]}, {style_map[style_type]}, {eng_p}"
+        
+        cols = st.columns(4) # Podgląd w siatce jak na icoloring
+        
+        for i in range(count):
+            status.info(f"Generating page {i+1} of {count}...")
+            
+            # Unikalność każdej strony w serii
+            p = f"{final_base_prompt}, unique composition {random.randint(0, 1000)}"
             img = master_generate(p)
+            
             if img:
                 buf = BytesIO(); img.save(buf, format="PNG")
                 st.session_state['pdf_basket'].append(buf.getvalue())
-                st.image(img, width=200, caption=f"Strona {i+1}")
-            bar.progress((i+1)/ile)
+                
+                # Wyświetlanie w siatce
+                with cols[i % 4]:
+                    st.image(img, use_container_width=True)
+            
+            bar.progress((i+1)/count)
+        
+        status.success(f"Successfully generated {count} pages!")
 
-elif tryb == "🦁 NICHE FINDER & SEO":
-    st.header("🦁 Analiza Nisz Amazon USA/UK")
-    if st.button("🔍 SKANUJ TRENDY"):
-        st.success("**TOP NISZE:** 1. Easter Biblical, 2. Bold & Easy Cozy, 3. Celestial Animals")
-        st.info("SEO: coloring book for adults, stress relief, kdp, 2026 trends")
-
-elif tryb == "📖 KDP STORY AI (Foto-Bajka)":
-    st.header("📖 Personalizowana Bajka ze zdjęcia")
-    f_photo = st.file_uploader("📸 Wgraj zdjęcie dziecka:", type=['png', 'jpg'])
-    imię = st.text_input("Imię dziecka:")
-    postać = st.selectbox("Zamień w:", ["Misia", "Superbohatera", "Robota"])
-    if f_photo and st.button("🚀 GENERUJ BAJKĘ"):
-        photo_bytes = f_photo.read()
-        photo_base64 = base64.b64encode(photo_bytes).decode('utf-8')
-        p_url = f"data:{f_photo.type};base64,{photo_base64}"
-        f_seed = random.randint(0, 999999) # Stały wygląd postaci
-        for i in range(5):
-            p = f"Coloring book illustration, {imię} as a {postać} based on photo, whimsical, step {i}, consistent"
-            img = master_generate(p, image_url=p_url, seed=f_seed, is_color=True)
-            if img:
-                buf = BytesIO(); img.save(buf, format="PNG")
-                st.session_state['pdf_basket'].append(buf.getvalue())
-
-elif tryb == "📸 ZDJĘCIE NA KONTUR 8K":
-    st.header("📸 Twoje zdjęcie na profesjonalny kontur")
-    f = st.file_uploader("Wgraj zdjęcie:", type=['png', 'jpg'])
-    if f and st.button("KONWERTUJ"):
-        img = Image.open(f).convert('L')
-        img_edges = ImageOps.invert(img.filter(ImageFilter.FIND_EDGES))
-        st.image(ImageEnhance.Contrast(img_edges).enhance(3.5))
-
-# --- EKSPORT PDF (FORMAT KDP) ---
+# --- EKSPORT PDF ---
 if st.session_state['pdf_basket']:
     st.divider()
-    if st.button("📥 POBIERZ GOTOWY PDF (8.5x11)"):
+    st.subheader("📦 Final Book Package")
+    if st.button("📥 DOWNLOAD KDP READY PDF (8.5x11)"):
         out = BytesIO()
         pdf = canvas.Canvas(out, pagesize=(8.5*inch, 11*inch))
         for d in st.session_state['pdf_basket']:
-            pdf.drawImage(BytesIO(d), 0.75*inch, 1.5*inch, width=7*inch, height=8*inch)
-            pdf.showPage() # Rysunek
-            pdf.showPage() # Pusta strona
+            pdf.drawImage(BytesIO(d), 0.75*inch, 1*inch, width=7*inch, height=9*inch)
+            pdf.showPage()
+            pdf.showPage() # Blank back page
         pdf.save()
-        st.download_button("Zapisz PDF", out.getvalue(), "PROJEKT_KDP_FINAL.pdf")
+        st.download_button("💾 Save PDF", out.getvalue(), "icoloring_kdp_batch.pdf")
