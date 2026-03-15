@@ -32,8 +32,8 @@ st.sidebar.markdown("---")
 tryb = st.sidebar.selectbox("Wybierz Tryb", ["Tekst na Kolorowankę", "Zdjęcie na Kolorowankę"])
 
 # 3. OBSŁUGA API (Klucz pobierzemy z Secrets)
-if "FAL_KEY" in st.secrets:
-    os.environ["FAL_KEY"] = st.secrets["FAL_KEY"]
+
+os.environ["FAL_KEY"] = "cf0a6c98-7933-45df-918d-5757b24e9a30:afc267a3e94340879464bbea2862b40b"
 
 # 4. LOGIKA GŁÓWNA
 st.title("🎨 iColoring Studio")
