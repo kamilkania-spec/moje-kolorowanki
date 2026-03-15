@@ -2,13 +2,15 @@ import streamlit as st
 import os
 import fal_client
 from deep_translator import GoogleTranslator
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageFilter # Dodano ImageFilter dla lepszych konturów
 import requests
 from io import BytesIO
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
+import numpy as np # Dodano numpy do przetwarzania obrazu
 
 # --- KONFIGURACJA ---
+# Upewnij się, że ten klucz jest aktywny na fal.ai
 os.environ["FAL_KEY"] = "cf0a6c98-7933-45df-918d-5757b24e9a30:afc267a3e94340879464bbea2862b40b"
 ADMIN_NICK = "admin"
 ADMIN_PASS = "KDP2026"
@@ -150,14 +152,31 @@ elif tryb == "📖 Opowieść (Story Mode)":
             bar_s.progress((i+1)/ile_s)
 
 elif tryb == "📸 Zdjęcie na Kontur":
-    st.header("📸 Twoje zdjęcie -> Szkic 8K")
+    st.header("📸 Twoje zdjęcie -> Bezstratny Szkic 8K")
     f = st.file_uploader("Wgraj plik (JPG/PNG):", type=['png', 'jpg'])
-    if f and st.button("KONWERTUJ"):
-        img = Image.open(f).convert('L')
-        img = ImageEnhance.Contrast(img).enhance(3.0).point(lambda p: 0 if p < 145 else 255)
-        buf = BytesIO(); img.save(buf, format="PNG")
-        st.session_state['pdf_basket'].append(buf.getvalue())
-        st.image(img)
+    if f and st.button("KONWERTUJ NA KONTUR"):
+        with st.spinner("Przetwarzam zdjęcie na bezstratny kontur..."):
+            # Wczytanie i konwersja na odcienie szarości
+            img_pil = Image.open(f).convert('L')
+            
+            # Ulepszone wykrywanie konturów (bezstratne)
+            # 1. Rozmycie Gaussa dla redukcji szumów
+            img_blurred = img_pil.filter(ImageFilter.GaussianBlur(radius=1))
+            
+            # 2. Wykrywanie krawędzi (np. filtr Sobela lub precyzyjny Canny - tu uproszczony Canny przez filtry PIL)
+            img_edges = img_blurred.filter(ImageFilter.FIND_EDGES)
+            
+            # 3. Odwrócenie kolorów (czarne krawędzie na białym tle) i poprawa kontrastu
+            img_final = ImageOps.invert(img_edges)
+            img_final = ImageEnhance.Contrast(img_final).enhance(2.0)
+            
+            # Skalowanie do wysokiej rozdzielczości (opcjonalnie, dla spójności PDF)
+            w, h = img_final.size
+            img_final_res = img_final.resize((w*2, h*2), resample=Image.LANCZOS)
+
+            buf = BytesIO(); img_final_res.save(buf, format="PNG")
+            st.session_state['pdf_basket'].append(buf.getvalue())
+            st.image(img_final_res, caption="Wygenerowany bezstratny kontur")
 
 elif tryb == "💬 Forum":
     st.header("💬 Forum Społeczności")
