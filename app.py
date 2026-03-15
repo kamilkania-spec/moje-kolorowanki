@@ -9,6 +9,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 
 # --- KONFIGURACJA ---
+# Upewnij się, że ten klucz jest aktywny na fal.ai
 os.environ["FAL_KEY"] = "cf0a6c98-7933-45df-918d-5757b24e9a30:afc267a3e94340879464bbea2862b40b"
 ADMIN_USER = "admin"
 ADMIN_PASS = "KDP2026"
@@ -32,21 +33,23 @@ if not st.session_state["authenticated"]:
             st.session_state["authenticated"] = True
             st.session_state["user_nick"] = u
             st.rerun()
-        else: st.error("Błąd!")
+        else: st.error("Błąd logowania!")
     st.stop()
 
-# --- SILNIK GRAFICZNY ---
+# --- POPRAWIONY SILNIK GRAFICZNY ---
 def get_final_image(prompt):
-    """Prawdziwe generowanie obrazu przez API"""
-    handler = fal_client.submit("fal-ai/flux/schnell", arguments={"prompt": prompt})
-    result = handler.get()
-    url = result['images'][0]['url']
-    resp = requests.get(url)
-    img = Image.open(BytesIO(resp.content)).convert('L')
-    # Upscaling do 8K (cyfrowy)
-    w, h = img.size
-    img = img.resize((w*2, h*2), resample=Image.LANCZOS)
-    return ImageEnhance.Contrast(img).enhance(3.5)
+    try:
+        # Używamy subscribe zamiast submit dla większej stabilności
+        result = fal_client.subscribe("fal-ai/flux/schnell", arguments={"prompt": prompt})
+        url = result['images'][0]['url']
+        resp = requests.get(url)
+        img = Image.open(BytesIO(resp.content)).convert('L')
+        w, h = img.size
+        img = img.resize((w*2, h*2), resample=Image.LANCZOS)
+        return ImageEnhance.Contrast(img).enhance(3.5)
+    except Exception as e:
+        st.error(f"Błąd API FAL.AI: Sprawdź środki na koncie lub klucz API. Szczegóły: {e}")
+        return None
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -60,91 +63,64 @@ with st.sidebar:
     if st.button("🗑️ Wyczyść projekt"):
         st.session_state['pdf_basket'] = []; st.rerun()
 
-# --- LOGIKA MODUŁÓW ---
-
+# --- MODUŁY ---
 if tryb == "✏️ Tekst na Kolorowankę":
     st.header("🎨 Generator z Kategoriami")
+    # PRZYWRÓCONE KATEGORIE
     kat = st.radio("Wybierz styl domyślny:", ["Dowolny", "Geometria", "Pejzaż", "Przyroda", "Architektura"])
-    opis = st.text_input("Co narysować?")
+    opis = st.text_input("Co narysować? (np. róża w wazonie)")
     
     if st.button("GENERUJ 8K"):
         if opis:
-            with st.spinner("AI pracuje nad Twoim obrazem..."):
+            with st.spinner("Łączenie z serwerem graficznym..."):
                 eng_opis = translator.translate(opis)
-                full_prompt = f"Coloring book page, {kat if kat != 'Dowolny' else ''} {eng_opis}, 8k, black and white, clean bold lines, no shading"
+                full_prompt = f"Coloring book page, {kat if kat != 'Dowolny' else ''} {eng_opis}, 8k, black and white, clean bold lines, no shading, white background"
                 
                 final_img = get_final_image(full_prompt)
                 
-                buf = BytesIO()
-                final_img.save(buf, format="PNG")
-                st.session_state['pdf_basket'].append(buf.getvalue())
-                st.session_state['last_topic'] = opis
-                st.image(final_img, caption="Obraz wygenerowany i dodany do PDF!")
+                if final_img:
+                    buf = BytesIO()
+                    final_img.save(buf, format="PNG")
+                    st.session_state['pdf_basket'].append(buf.getvalue())
+                    st.session_state['last_topic'] = opis
+                    st.image(final_img, caption="Gotowe! Dodano do Twojego PDF.")
 
 elif tryb == "💬 Forum Społeczności":
-    st.header("💬 Forum")
-    msg = st.text_input("Twoja wiadomość:")
+    st.header("💬 Forum Inspiracji")
+    msg = st.text_input("Napisz coś do innych:")
     if st.button("Wyślij"):
         if msg:
             st.session_state["posts"].insert(0, {"u": st.session_state["user_nick"], "m": msg})
             st.rerun()
     for p in st.session_state["posts"]:
-        st.write(f"**{p['u']}**: {p['m']}")
+        st.info(f"**{p['u']}**: {p['m']}")
 
 elif tryb == "📖 Opowieść (Story Mode)":
-    st.header("📖 Buduj książkę")
-    hist = st.text_area("O czym historia?")
+    st.header("📖 Projektowanie Opowieści")
+    hist = st.text_area("Opisz krótko historię:")
     ile = st.number_input("Ile stron?", 5, 50, 10)
-    if st.button("GENERUJ CAŁOŚĆ"):
+    if st.button("GENERUJ CAŁĄ KSIĄŻKĘ"):
         st.session_state['last_topic'] = hist
         bar = st.progress(0)
         eng_hist = translator.translate(hist)
         for i in range(ile):
-            p = f"Step {i+1} of {ile}: {eng_hist}. Coloring page, 8k, bold outlines"
+            p = f"Step {i+1} of {ile}: {eng_hist}. Coloring page, 8k, consistent style, bold outlines"
             img = get_final_image(p)
-            buf = BytesIO(); img.save(buf, format="PNG")
-            st.session_state['pdf_basket'].append(buf.getvalue())
+            if img:
+                buf = BytesIO(); img.save(buf, format="PNG")
+                st.session_state['pdf_basket'].append(buf.getvalue())
             bar.progress((i+1)/ile)
+        st.success("Książka złożona!")
 
-elif tryb == "🦁 Generuj Serię Niszy":
-    st.header("🦁 Niche Blaster")
-    nisza = st.text_input("Nisza (np. Dinozaury):")
-    ile_n = st.number_input("Ile grafik?", 5, 50, 10)
-    if st.button("GENERUJ SERIĘ"):
-        st.session_state['last_topic'] = nisza
-        eng_n = translator.translate(nisza)
-        bar_n = st.progress(0)
-        for i in range(ile_n):
-            p = f"Coloring page, {eng_n}, 8k, unique composition, bold outlines"
-            img = get_final_image(p)
-            buf = BytesIO(); img.save(buf, format="PNG")
-            st.session_state['pdf_basket'].append(buf.getvalue())
-            bar_n.progress((i+1)/ile_n)
-
-elif tryb == "📸 Zdjęcie na Kolorowankę":
-    st.header("📸 Zdjęcie -> Kontur")
-    foto = st.file_uploader("Wgraj plik", type=['png', 'jpg'])
-    if foto and st.button("Konwertuj"):
-        img = Image.open(foto).convert('L')
-        img = ImageEnhance.Contrast(img).enhance(2.5).point(lambda p: 0 if p < 140 else 255)
-        buf = BytesIO(); img.save(buf, format="PNG")
-        st.session_state['pdf_basket'].append(buf.getvalue())
-        st.image(img)
-
-# --- PDF I SEO ---
+# --- SEKCJA PDF ---
 if st.session_state['pdf_basket']:
     st.divider()
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("📥 POBIERZ PDF"):
-            out = BytesIO()
-            p = canvas.Canvas(out, pagesize=(8.5*inch, 11*inch))
-            for d in st.session_state['pdf_basket']:
-                p.drawImage(BytesIO(d), 0.5*inch, 1*inch, width=7.5*inch, height=9*inch)
-                p.showPage(); p.showPage()
-            p.save()
-            st.download_button("Zapisz plik PDF", out.getvalue(), "kdp_final.pdf")
-    with c2:
-        if st.session_state['last_topic']:
-            st.write("**Sugestia SEO:**")
-            st.write(f"Tytuł: {st.session_state['last_topic'].capitalize()} Coloring Book for Adults")
+    if st.button("📥 POBIERZ GOTOWY PDF"):
+        out = BytesIO()
+        p = canvas.Canvas(out, pagesize=(8.5*inch, 11*inch))
+        for d in st.session_state['pdf_basket']:
+            p.drawImage(BytesIO(d), 0.5*inch, 1*inch, width=7.5*inch, height=9*inch)
+            p.showPage()
+            p.showPage()
+        p.save()
+        st.download_button("Zapisz plik KDP", out.getvalue(), "moje_kolorowanki.pdf")
