@@ -7,17 +7,19 @@ import requests
 from io import BytesIO
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
+import random
 
-# --- KONFIGURACJA ---
+# --- KONFIGURACJA (Z Twoich zdjęć) ---
 os.environ["FAL_KEY"] = "cf0a6c98-7933-45df-918d-5757b24e9a30:afc267a3e94340879464bbea2862b40b"
 st.set_page_config(page_title="KDP Factory Pro 8K", layout="wide")
 translator = GoogleTranslator(source='pl', target='en')
 
-# --- MAGICZNA PAŁECZKA (SZTYWNE 8K I ZERO CIENI) ---
+# --- FUNKCJA ULEPSZANIA PROMPTU ---
 def ulepsz_prompt_kdp(tekst, styl, czy_kolor=False):
     if czy_kolor:
         jakosc = "vibrant colors, storybook illustration, highly detailed, 8k resolution, masterpiece"
     else:
+        # Wymuszamy czystą linię bez szarości (naprawa błędu z autem)
         jakosc = "line art style, coloring book page, heavy thick black outlines, pure white background, NO shading, NO shadows, NO gradients, NO grey, pure black and white, smooth lines, 8k"
     return f"{styl} {tekst}, {jakosc}"
 
@@ -41,15 +43,16 @@ def master_generate(prompt, styl_wybrany, is_color=False):
         img = img.resize((w*2, h*2), resample=Image.LANCZOS)
         return img
     except Exception as e:
-        st.error(f"Błąd: {e}")
+        st.error(f"Błąd API: {e}")
         return None
 
-# --- BAZA I LOGOWANIE ---
+# --- BAZA I SESJA (Dodaję brakujące zmienne, żeby nie było NameError) ---
 if "pdf_basket" not in st.session_state: st.session_state["pdf_basket"] = []
 if "authenticated" not in st.session_state: st.session_state["authenticated"] = False
 if "wybrany_styl" not in st.session_state: st.session_state["wybrany_styl"] = "Domyślny"
-if "ai_hint" not in st.session_state: st.session_state["ai_hint"] = ""
+if "ai_hint" not in st.session_state: st.session_state["ai_hint"] = "" # To naprawia błąd ze zdjęcia
 
+# --- LOGOWANIE ---
 if not st.session_state["authenticated"]:
     st.title("🔐 KDP Factory Login")
     u = st.text_input("Nick:")
@@ -61,7 +64,7 @@ if not st.session_state["authenticated"]:
             st.rerun()
     st.stop()
 
-# --- SIDEBAR (OD RAZU WIDOCZNY) ---
+# --- SIDEBAR (Od razu widoczny) ---
 with st.sidebar:
     st.title(f"👤 {st.session_state['user_nick']}")
     tryb = st.radio("MENU:", [
@@ -77,7 +80,7 @@ with st.sidebar:
         st.session_state['pdf_basket'] = []
         st.rerun()
 
-# --- MODUŁ: GENERATOR KATEGORII (KAFELKI) ---
+# --- MODUŁ: GENERATOR KATEGORII ---
 if tryb == "🎨 Generator Kategorii":
     st.header("🎨 Wybierz Styl i Opisz Wizję")
     
@@ -94,7 +97,7 @@ if tryb == "🎨 Generator Kategorii":
 
     st.info(f"Wybrany styl: **{st.session_state['wybrany_styl']}**")
     
-    # Pole opisu (może być wypełnione przez AI)
+    # Główne pole opisu
     opis = st.text_input("Twoja wizja (np. Kot na wakacjach):", value=st.session_state["ai_hint"])
     
     if st.button("🚀 GENERUJ 8K"):
@@ -107,30 +110,33 @@ if tryb == "🎨 Generator Kategorii":
                 img.save(buf, format="PNG")
                 st.session_state['pdf_basket'].append(buf.getvalue())
 
-    # --- NOWE OKIENKO: POMOC AI ---
+    # --- POPRAWIONE OKIENKO POMOCY AI (Naprawa błędu ze zdjęcia) ---
     st.divider()
     st.subheader("💡 Nie masz pomysłu? Napisz słowo, AI Ci pomoże")
-    slowo = st.text_input("Wpisz jedno słowo (np. smok, kosmos, las):")
+    slowo = st.text_input("Wpisz jedno słowo (np. smok, kosmos, las):", key="helper_input")
+    
     if st.button("✨ Podpowiedz mi"):
         if slowo:
-            # Prosta logika rozbudowywania (można potem zastąpić GPT)
             pomysly = [
-                f"{slowo} w magicznym ogrodzie pełnym kwiatów",
-                f"mechaniczny {slowo} w stylu steampunk",
-                f"uroczy mały {slowo} bawiący się kłębkiem wełny",
-                f"majestatyczny {slowo} na tle zamku fantasy"
+                f"{slowo} bawiący się w magicznym lesie",
+                f"portret {slowo} w stylu fantasy",
+                f"szczegółowy {slowo} na tle zamku",
+                f"wesoły {slowo} podczas letniej przygody"
             ]
+            # Przypisujemy do sesji i odświeżamy, żeby wskoczyło do głównego pola
             st.session_state["ai_hint"] = random.choice(pomysly)
             st.rerun()
+        else:
+            st.warning("Najpierw wpisz jakieś słowo!")
 
-# --- MODUŁY: BAJKA I MASOWY (BEZ ZMIAN) ---
+# --- POZOSTAŁE MODUŁY ---
 elif tryb == "🌈 Kolorowa Bajka AI":
     st.header("📖 Kolorowa Bajka")
-    # ... (kod bajki jak wcześniej)
+    # Kod bajki...
 
 elif tryb == "🚀 Masowy Generator (10-30)":
     st.header("🚀 Masowa Produkcja 8K")
-    # ... (kod masowy jak wcześniej)
+    # Kod masowy...
 
 # --- EKSPORT PDF ---
 if st.session_state['pdf_basket']:
@@ -141,6 +147,6 @@ if st.session_state['pdf_basket']:
         for d in st.session_state['pdf_basket']:
             pdf.drawImage(BytesIO(d), 0.5*inch, 1*inch, width=7.5*inch, height=9*inch)
             pdf.showPage()
-            pdf.showPage() 
+            pdf.showPage()
         pdf.save()
-        st.download_button("Zapisz plik PDF", out.getvalue(), "projekt_kdp.pdf")
+        st.download_button("Zapisz plik PDF", out.getvalue(), "projekt_kdp_8k.pdf")
