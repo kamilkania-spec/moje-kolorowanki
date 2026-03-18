@@ -2,11 +2,12 @@ import streamlit as st
 import os
 import fal_client
 from deep_translator import GoogleTranslator
-from PIL import Image, ImageEnhance
+from PIL import Image
 import requests
 from io import BytesIO
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
+from reportlab.lib.utils import ImageReader
 import random
 
 # --- KONFIGURACJA ---
@@ -14,44 +15,32 @@ os.environ["FAL_KEY"] = "cf0a6c98-7933-45df-918d-5757b24e9a30:afc267a3e943408794
 st.set_page_config(page_title="KDP Factory Pro 8K", layout="wide")
 translator = GoogleTranslator(source='pl', target='en')
 
-# --- LOGIKA GENEROWANIA (Czyste 8K) ---
-def master_generate(prompt, styl_wybrany, is_color=False):
+# --- KLUCZ DO JAKOŚCI 8K (Naprawiony prompt i brak psucia obrazu) ---
+def master_generate(prompt, styl_wybrany):
     try:
-        # Sztywny prompt na czyste linie
-        if is_color:
-            jakosc = "vibrant colors, storybook illustration, 8k resolution"
-        else:
-            jakosc = "coloring book page, heavy thick black outlines, white background, NO shading, NO grey, 8k"
+        # Ten prompt wymusza ultra jakość bez szarości
+        final_p = f"Coloring book page for KDP, {styl_wybrany}, {prompt}, thick black outlines, pure white background, 8k resolution, high contrast, clean professional line art, no shading, no background noise, masterpiece"
         
-        final_p = f"{styl_wybrany} {prompt}, {jakosc}"
         arguments = {"prompt": final_p}
         handler = fal_client.subscribe("fal-ai/flux/schnell", arguments=arguments)
         url = handler['images'][0]['url']
+        
         resp = requests.get(url)
         img = Image.open(BytesIO(resp.content))
-
-        # Obróbka na ultra-kontur
-        if not is_color:
-            img = img.convert('L')
-            img = ImageEnhance.Contrast(img).enhance(5.0)
-            img = img.point(lambda p: 255 if p > 140 else 0, mode='1')
-            img = img.convert('RGB') # PDF lubi RGB nawet dla czarno-białych
         
-        # Skalowanie do 8K (LANCZOS)
-        w, h = img.size
-        img = img.resize((w*2, h*2), resample=Image.LANCZOS)
+        # NIE konwertujemy na '1' (to psuło jakość na zdjęciach!)
+        # Zostawiamy czyste RGB z wysokim kontrastem
         return img
     except Exception as e:
         st.error(f"Błąd API: {e}")
         return None
 
-# --- SESJA ---
+# --- SESJA I LOGOWANIE ---
 if "pdf_basket" not in st.session_state: st.session_state["pdf_basket"] = []
 if "authenticated" not in st.session_state: st.session_state["authenticated"] = False
 if "wybrany_styl" not in st.session_state: st.session_state["wybrany_styl"] = "Domyślny"
 if "ai_hint" not in st.session_state: st.session_state["ai_hint"] = ""
 
-# --- LOGOWANIE ---
 if not st.session_state["authenticated"]:
     st.title("🔐 KDP Factory Login")
     u = st.text_input("Nick:")
@@ -62,82 +51,72 @@ if not st.session_state["authenticated"]:
             st.rerun()
     st.stop()
 
-# --- SIDEBAR (WIDOCZNY, NIE ROZSUWANY) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.title("⚙️ PANEL")
-    tryb = st.radio("MENU:", [
-        "🎨 Generator Kategorii", 
-        "🌈 Kolorowa Bajka AI", 
-        "🚀 Masowy Generator (10-30)",
-        "📷 Zdjęcie na Kontur"
-    ])
-    st.divider()
-    if st.button("🗑️ Wyczyść Projekt"):
+    tryb = st.radio("MENU:", ["🎨 Generator Kategorii", "🌈 Bajka AI", "🚀 Masowy Generator"])
+    if st.button("🗑️ Wyczyść Wszystko"):
         st.session_state['pdf_basket'] = []
         st.rerun()
 
-# --- MODUŁ GŁÓWNY ---
+# --- GŁÓWNY GENERATOR (NAPRAWIONE KAFLE I JAKOŚĆ) ---
 if tryb == "🎨 Generator Kategorii":
-    st.header("🎨 Wybierz Styl i Opisz Wizję")
+    st.header("🎨 Szybki Generator 8K")
     
-    # KAFELKI (OD RAZU WIDOCZNE)
+    # Naprawione kafle - teraz styl faktycznie zmienia prompt!
     style = {
-        "Domyślny": "🎨", "Architektura": "🏛️", "Przyroda": "🌿", 
-        "Zwierzęta": "🦁", "Mandala": "☸️", "Fantasy": "🧙", "Komiks": "💥"
+        "Domyślny": "minimalist line art", 
+        "Architektura": "detailed architecture buildings", 
+        "Przyroda": "forest and nature landscape", 
+        "Zwierzęta": "animal portrait", 
+        "Mandala": "complex mandala pattern", 
+        "Fantasy": "magic fantasy world", 
+        "Komiks": "comic book style outlines"
     }
     
     cols = st.columns(len(style))
-    for i, (s_name, s_icon) in enumerate(style.items()):
+    for i, (s_name, s_val) in enumerate(style.items()):
         with cols[i]:
-            if st.button(f"{s_icon}\n{s_name}"):
-                st.session_state["wybrany_styl"] = s_name
+            if st.button(f"{s_name}"):
+                st.session_state["wybrany_styl"] = s_val
+                st.toast(f"Wybrano styl: {s_name}")
 
-    st.write(f"Wybrany styl: **{st.session_state['wybrany_styl']}**")
-    
-    opis = st.text_input("Twoja wizja:", value=st.session_state["ai_hint"])
+    opis = st.text_input("Co narysować?", value=st.session_state["ai_hint"])
     
     if st.button("🚀 GENERUJ 8K"):
-        with st.spinner("Generowanie..."):
+        with st.spinner("Generowanie żyletki 8K..."):
             eng = translator.translate(opis)
             img = master_generate(eng, st.session_state["wybrany_styl"])
             if img:
-                st.image(img)
-                # Zapisujemy jako PNG do koszyka
+                st.image(img, use_container_width=True)
                 buf = BytesIO()
                 img.save(buf, format="PNG")
                 st.session_state['pdf_basket'].append(buf.getvalue())
 
-    # --- OKIENKO POMOCY AI ---
+    # --- POMOC AI ---
     st.divider()
-    st.subheader("💡 Nie masz pomysłu? Napisz słowo, AI Ci pomoże")
-    slowo = st.text_input("Wpisz słowo (np. KOT):")
-    if st.button("✨ Podpowiedz mi"):
+    st.subheader("💡 Pomoc AI")
+    slowo = st.text_input("Wpisz słowo:")
+    if st.button("✨ Podpowiedz"):
         if slowo:
-            poms = [f"{slowo} w magicznym lesie", f"mały uroczy {slowo}", f"{slowo} jako superbohater"]
+            poms = [f"{slowo} w stylu zen", f"szczegółowy {slowo} dla dorosłych", f"bajkowy {slowo}"]
             st.session_state["ai_hint"] = random.choice(poms)
             st.rerun()
 
-# --- EKSPORT PDF (FIXED!) ---
+# --- EKSPORT PDF (NAPRAWIONY BŁĄD Z BYTESIO) ---
 if st.session_state['pdf_basket']:
     st.divider()
-    st.subheader("📥 Pobierz Gotowy Projekt")
-    if st.button("📥 POBIERZ PDF DO AMAZON KDP"):
+    if st.button("📥 POBIERZ PDF (AMAZON KDP)"):
         try:
             output = BytesIO()
-            # Ustawiamy rozmiar strony 8.5 x 11 cali (Standard Amazon KDP)
             c = canvas.Canvas(output, pagesize=(8.5*inch, 11*inch))
-            
             for img_bytes in st.session_state['pdf_basket']:
-                # KLUCZOWA POPRAWKA: Zamiana bajtów na obiekt obrazu dla reportlab
-                img_io = BytesIO(img_bytes)
-                c.drawImage(ImageReader(img_io), 0.5*inch, 1*inch, width=7.5*inch, height=9*inch)
-                c.showPage() # Obrazek
-                c.showPage() # Pusta strona (standard KDP)
-                
+                # Użycie ImageReader rozwiązuje błąd ze zdjęcia
+                img_reader = ImageReader(BytesIO(img_bytes))
+                c.drawImage(img_reader, 0.5*inch, 1*inch, width=7.5*inch, height=9*inch)
+                c.showPage()
+                c.showPage() # Pusta strona pod KDP
             c.save()
-            st.download_button("💾 Zapisz plik PDF", output.getvalue(), "kolorowanka_8k.pdf", "application/pdf")
+            st.download_button("💾 Pobierz gotowy plik", output.getvalue(), "kdp_project.pdf", "application/pdf")
         except Exception as e:
-            st.error(f"Coś poszło nie tak z PDF: {e}")
-
-# Dodatkowy import wymagany do poprawki PDF
-from reportlab.lib.utils import ImageReader
+            st.error(f"Błąd PDF: {e}")
