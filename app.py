@@ -10,85 +10,131 @@ from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 import random
 
-# --- KLUCZ ---
+# --- KONFIGURACJA ---
 os.environ["FAL_KEY"] = "cf0a6c98-7933-45df-918d-5757b24e9a30:afc267a3e94340879464bbea2862b40b"
-st.set_page_config(page_title="KDP Factory ULTRA 8K", layout="wide")
+st.set_page_config(page_title="KDP Factory ULTRA FIX", layout="wide")
 translator = GoogleTranslator(source='pl', target='en')
 
-def generate_ultra(prompt, seed=None):
+# --- SILNIK GENERUJĄCY (STABILNY) ---
+def master_generate(prompt, mode="bw", seed=None):
     try:
-        # Maksymalnie uproszczony, techniczny prompt dla idealnych konturów
-        final_p = (
-            f"Ultra-clean coloring book page for kids, {prompt}. "
-            "Pure black and white linear art, thick bold black outlines, solid flat white background. "
-            "STRICTLY NO shading, NO gray, NO gradients, NO shadows, NO textures. "
-            "Professional vector style, high contrast, 8k resolution."
-        )
+        if mode == "color":
+            final_p = f"Vibrant kids book illustration, {prompt}, clean lines, high resolution, masterpiece"
+        else:
+            final_p = (
+                f"Coloring book page, {prompt}, heavy thick black outlines, "
+                "pure white background, NO shading, NO gray, NO textures, 8k resolution"
+            )
         
         actual_seed = seed if seed else random.randint(1, 1000000)
-        
-        # Używamy modelu DEV dla najwyższej precyzji
-        arguments = {
+        # Przełączam na Schnell dla szybkości i stabilności po tylu błędach
+        handler = fal_client.subscribe("fal-ai/flux/schnell", arguments={
             "prompt": final_p,
-            "seed": actual_seed,
-            "image_size": "portrait_4_3",
-            "guidance_scale": 4.0,
-            "num_inference_steps": 35 # Więcej kroków = czystsza linia
-        }
-        
-        handler = fal_client.subscribe("fal-ai/flux/dev", arguments=arguments)
+            "seed": actual_seed
+        })
         url = handler['images'][0]['url']
-        
         resp = requests.get(url)
         img = Image.open(BytesIO(resp.content))
         
-        # Forsowanie czystej czerni i bieli
-        img = img.convert('L')
-        img = ImageEnhance.Contrast(img).enhance(3.0) 
-        return img.convert('RGB')
+        if mode == "bw":
+            img = img.convert('L')
+            img = ImageEnhance.Contrast(img).enhance(2.5)
+            img = img.convert('RGB')
+        return img
     except Exception as e:
-        st.error(f"Błąd: {e}")
+        st.error(f"Błąd API: {e}")
         return None
 
-# --- LOGIKA SESJI ---
-if "basket" not in st.session_state: st.session_state["basket"] = []
+# --- INICJALIZACJA SESJI ---
+if "pdf_basket" not in st.session_state: st.session_state["pdf_basket"] = []
 if "auth" not in st.session_state: st.session_state["auth"] = False
+if "ai_hint" not in st.session_state: st.session_state["ai_hint"] = ""
 
+# --- LOGOWANIE ---
 if not st.session_state["auth"]:
-    u = st.text_input("Nick:")
-    p = st.text_input("Hasło:", type="password")
+    st.title("🔐 Login")
+    u = st.text_input("Nick")
+    p = st.text_input("Hasło", type="password")
     if st.button("Zaloguj"):
         if u == "admin" and p == "KDP2026":
             st.session_state["auth"] = True
             st.rerun()
     st.stop()
 
-# --- INTERFEJS ---
-st.title("🚀 KDP ULTRA FACTORY")
-opis = st.text_input("Co generujemy? (wpisz konkretnie, np. 'Lion head mandala' lub 'Sport car')")
-ile = st.number_input("Ilość:", 1, 15, 1)
+# --- SIDEBAR (MENU) ---
+with st.sidebar:
+    st.title("📦 MENU")
+    tryb = st.radio("Wybierz:", ["🎨 Generator", "🌈 Bajka", "🚀 Masowy", "📷 Foto"])
+    if st.button("🗑️ CZYŚĆ WSZYSTKO"):
+        st.session_state["pdf_basket"] = []
+        st.rerun()
 
-if st.button("GENERUJ SERIĘ"):
-    eng = translator.translate(opis)
-    cols = st.columns(3)
-    for i in range(int(ile)):
-        with st.spinner(f"Praca nad {i+1}..."):
-            img = generate_ultra(eng, seed=random.randint(1, 999999))
+# --- MODUŁY ---
+if tryb == "🎨 Generator":
+    st.header("🎨 Generator Kategorii")
+    opis = st.text_input("Twoja wizja:", value=st.session_state["ai_hint"])
+    ile = st.slider("Ilość:", 1, 15, 1)
+    
+    if st.button("🚀 GENERUJ"):
+        eng = translator.translate(opis)
+        for i in range(ile):
+            with st.spinner(f"Tworzę {i+1}..."):
+                img = master_generate(eng, seed=random.randint(1,999999))
+                if img:
+                    st.image(img)
+                    buf = BytesIO()
+                    img.save(buf, format="PNG")
+                    st.session_state["pdf_basket"].append(buf.getvalue())
+    
+    st.divider()
+    slowo = st.text_input("Nie masz pomysłu? Wpisz słowo:")
+    if st.button("✨ Podpowiedz mi"):
+        poms = [f"{slowo} na wakacjach", f"uroczy {slowo}", f"mandala {slowo}"]
+        st.session_state["ai_hint"] = random.choice(poms)
+        st.rerun()
+
+elif tryb == "🌈 Bajka":
+    st.header("🌈 Bajka AI")
+    b_opis = st.text_area("Opisz scenę bajki (kolorowa):")
+    if st.button("🚀 GENERUJ KOLOR"):
+        eng = translator.translate(b_opis)
+        img = master_generate(eng, mode="color")
+        if img:
+            st.image(img)
+            buf = BytesIO()
+            img.save(buf, format="PNG")
+            st.session_state["pdf_basket"].append(buf.getvalue())
+
+elif tryb == "🚀 Masowy":
+    st.header("🚀 Masowy Generator")
+    m_opis = st.text_input("Temat serii (np. Samochody):")
+    if st.button("🚀 GENERUJ 10 SZTUK"):
+        eng = translator.translate(m_opis)
+        for i in range(10):
+            img = master_generate(eng, seed=random.randint(1,999999))
             if img:
-                cols[i % 3].image(img)
                 buf = BytesIO()
                 img.save(buf, format="PNG")
-                st.session_state["basket"].append(buf.getvalue())
+                st.session_state["pdf_basket"].append(buf.getvalue())
+        st.success("Dodano 10 grafik!")
 
-# --- PDF ---
-if st.session_state["basket"]:
+elif tryb == "📷 Foto":
+    st.header("📷 Zdjęcie na Kontur")
+    st.write("Wgraj plik (opcja w budowie)...")
+
+# --- EKSPORT PDF ---
+if st.session_state["pdf_basket"]:
     st.divider()
-    if st.button("📥 POBIERZ PDF KDP"):
-        out = BytesIO()
-        pdf = canvas.Canvas(out, pagesize=(8.5*inch, 11*inch))
-        for img_data in st.session_state["basket"]:
-            img_obj = ImageReader(BytesIO(img_data))
-            pdf.drawImage(img_obj, 0.5*inch, 0.5*inch, width=7.5*inch, height=10*inch, preserveAspectRatio=True)
-            pdf.showPage()
-        pdf.save()
-        st.download_button("💾 Zapisz plik", out.getvalue(), "kdp_final.pdf")
+    st.subheader(f"Twoja Kolejka: {len(st.session_state['pdf_basket'])} stron")
+    if st.button("📥 POBIERZ PDF DLA KDP"):
+        try:
+            out = BytesIO()
+            pdf = canvas.Canvas(out, pagesize=(8.5*inch, 11*inch))
+            for data in st.session_state["pdf_basket"]:
+                img_obj = ImageReader(BytesIO(data))
+                pdf.drawImage(img_obj, 0.5*inch, 1*inch, width=7.5*inch, height=9*inch)
+                pdf.showPage()
+            pdf.save()
+            st.download_button("💾 Zapisz Plik PDF", out.getvalue(), "kdp_project.pdf", "application/pdf")
+        except Exception as e:
+            st.error(f"Błąd PDF: {e}")
