@@ -58,14 +58,14 @@ def master_generate(prompt, styl, mode="bw", seed=None, audience="Dzieci"):
 
         actual_seed = seed if seed is not None else random.randint(1, 99999999) 
         
-        handler = fal_client.subscribe("fal-ai/flux/dev", arguments={ 
+        # Wywołanie API fal.ai - używamy RUN dla stabilnego, synchronicznego wyniku
+        result = fal_client.run("fal-ai/flux/dev", arguments={ 
             "prompt": final_p, 
             "seed": actual_seed, 
             "num_inference_steps": 30,
             "guidance_scale": 3.5 
         }) 
         
-        result = handler.get() 
         if not result or 'images' not in result: return None
         url = result['images'][0]['url'] 
         resp = requests.get(url) 
