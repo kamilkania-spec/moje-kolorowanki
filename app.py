@@ -55,23 +55,21 @@ translator = get_translator()
 def master_generate(prompt, styl, mode="bw", seed=None, audience="Dzieci", consistency_context=None):
     try:
         quality = (
-            "8k resolution, ultra-high definition, hyper-detailed, masterpiece, award-winning art, "
-            "incredibly rich composition, sharp focus, flawless clean outlines, professional grade, "
-            "professional inking, high-end illustration, cinematic lighting, sharp edges, "
-            "3000 DPI print quality, clean white background, solid black lines"
+            "pure black and white coloring page, vector-like lines, perfectly smooth contours, "
+            "no noise, no dithering, no grain, high-contrast, professional inking, 8k resolution, "
+            "sharp focus, flawless clean outlines, solid black lines, pure white background"
         )
-        consistency = f"consistent character and composition with {consistency_context}," if consistency_context else ""
+        consistency = f"consistent style with {consistency_context}," if consistency_context else ""
         
         if audience == "Dzieci":
             complexity = (
-                "rich whimsical shapes, professional bold clean lines for kids, "
-                "imaginative storybook style, large easy coloring areas, charming details"
+                "bold and thick clean black outlines, very simple shapes, whimsical storybook style, "
+                "large easy coloring areas, charming minimalist details"
             )
         else:
             complexity = (
-                "overwhelmingly detailed patterns, complex intricate designs, "
-                "professional high-end adult coloring book style, imaginative and whimsical, "
-                "extremely fine detail, sophisticated composition, manga-style professional line art"
+                "intricate detailed designs, professional high-end adult coloring book style, "
+                "extremely fine and smooth lines, sophisticated composition, masterwork ink"
             )
 
         if mode == "cover":
@@ -84,8 +82,8 @@ def master_generate(prompt, styl, mode="bw", seed=None, audience="Dzieci", consi
             arguments={
                 "prompt": final_p,
                 "seed": seed if seed is not None else random.randint(1, 99999999),
-                "num_inference_steps": 45,  # Jeszcze więcej kroków dla precyzji linii jak z obrazka
-                "guidance_scale": 5.0,     # Zwiększona skala dla maksymalnej wierności jakości
+                "num_inference_steps": 40,
+                "guidance_scale": 4.5,
                 "width": 1024,
                 "height": 1024,
             },
@@ -106,16 +104,21 @@ def master_generate(prompt, styl, mode="bw", seed=None, audience="Dzieci", consi
 
 
 def to_contour_bw(image: Image.Image) -> Image.Image:
+    # 1. Konwersja do skali szarości
     gray = image.convert("L")
-    # Zoptymalizowana detekcja krawędzi dla jakości "Anime Masterpiece"
-    edges = gray.filter(ImageFilter.CONTOUR)
-    edges = ImageOps.autocontrast(edges, cutoff=1)
-    # Delikatniejsze progi, aby nie zgubić drobnych linii z referencji
-    line = edges.point(lambda p: 0 if p < 230 else 255).convert("L")
-    # Wygładzenie linii bez utraty ostrości
-    line = line.filter(ImageFilter.SMOOTH_MORE)
-    line = line.point(lambda p: 0 if p < 240 else 255).convert("L")
-    return line.convert("RGB")
+    
+    # 2. Agresywne czyszczenie tła i wzmocnienie linii (usuwa szum z krawędzi)
+    # Wszystko powyżej pewnego poziomu szarości staje się białe, reszta czarne
+    bw = gray.point(lambda p: 0 if p < 180 else 255).convert("1")
+    
+    # 3. Wygładzenie krawędzi (Anti-aliasing / Smoothing)
+    # Konwertujemy z powrotem na L, żeby móc nałożyć rozmycie i wygładzić schodki
+    smooth = bw.convert("L").filter(ImageFilter.SMOOTH_MORE)
+    
+    # 4. Finalne wyostrzenie krawędzi po wygładzeniu
+    final_bw = smooth.point(lambda p: 0 if p < 128 else 255).convert("RGB")
+    
+    return final_bw
 
 
 def strict_bw_validation(image: Image.Image) -> bool:
@@ -124,9 +127,10 @@ def strict_bw_validation(image: Image.Image) -> bool:
     return sum(hist[1:255]) == 0
 
 
-def png_300dpi_bytes(image: Image.Image) -> bytes:
+def png_max_dpi_bytes(image: Image.Image) -> bytes:
     out = BytesIO()
-    image.save(out, format="PNG", dpi=(300, 300), optimize=True)
+    # Zwiększamy DPI do 600 (standard dla druku artystycznego wysokiej klasy)
+    image.save(out, format="PNG", dpi=(600, 600), optimize=True, compress_level=9)
     return out.getvalue()
 
 
@@ -162,7 +166,7 @@ def convert_all_in_basket_to_contours():
     for i, data in enumerate(st.session_state["pdf_basket"], start=1):
         src = Image.open(BytesIO(data)).convert("RGB")
         contour = to_contour_bw(src)
-        png_bytes = png_300dpi_bytes(contour)
+        png_bytes = png_max_dpi_bytes(contour)
         svg_bytes = bitmap_to_svg_bytes(contour)
         valid = strict_bw_validation(contour)
         transformed.append(
@@ -239,7 +243,7 @@ with st.sidebar:
         ],
     )
     st.divider()
-    st.info("Zgodność: 300 DPI / KDP Ready")
+    st.info("Zgodność: **600 DPI (ULTRA) / KDP Ready**")
     if st.button("🗑️ WYCZYŚĆ PROJEKT"):
         st.session_state["pdf_basket"] = []
         st.session_state["transformed_assets"] = []
@@ -391,7 +395,7 @@ elif tryb == "🧪 Konwersja BW Kontur":
 
         zip_bytes = transformed_zip_bytes()
         st.download_button(
-            "📦 Pobierz ZIP (SVG + PNG 300 DPI)",
+            "📦 Pobierz ZIP (SVG + PNG 600 DPI)",
             zip_bytes,
             file_name="kontury_bw_svg_png.zip",
             mime="application/zip",
