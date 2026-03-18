@@ -58,7 +58,7 @@ def master_generate(prompt, styl, mode="bw", seed=None, audience="Dzieci", consi
             "8k resolution, ultra-high definition, hyper-detailed, masterpiece, award-winning art, "
             "incredibly rich composition, sharp focus, flawless clean outlines, professional grade, "
             "professional inking, high-end illustration, cinematic lighting, sharp edges, "
-            "300 DPI print quality, clean white background, solid black lines"
+            "3000 DPI print quality, clean white background, solid black lines"
         )
         consistency = f"consistent character and composition with {consistency_context}," if consistency_context else ""
         
