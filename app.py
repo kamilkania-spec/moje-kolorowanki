@@ -1,5 +1,4 @@
-python3 - <<'PY'
-content = '''import os
+import os
 import random
 import zipfile
 from io import BytesIO
@@ -269,7 +268,7 @@ if tryb == "🎨 Generator":
         with cols[i]:
             selected = st.session_state["wybrany_styl"] == s["name"]
             if st.button(
-                f"{s['icon']}\\n{s['name']}",
+                f"{s['icon']}\n{s['name']}",
                 key=f"style_{s['name']}",
                 use_container_width=True,
                 type="primary" if selected else "secondary",
@@ -396,7 +395,3 @@ if st.session_state["pdf_basket"]:
     with st.sidebar:
         st.divider()
         st.write(f"📄 Stron w projekcie: {len(st.session_state['pdf_basket'])}")
-'''
-open('/Users/kam/Documents/trae_projects/k/app.py','w',encoding='utf-8').write(content)
-print('ok')
-PY
