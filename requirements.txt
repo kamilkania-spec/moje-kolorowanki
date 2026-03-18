@@ -1,6 +1,6 @@
-streamlit
-fal_client
-deep_translator
-pillow
+ streamlit
+fal-client
+deep-translator
+Pillow
 requests
 reportlab
