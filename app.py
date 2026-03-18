@@ -18,6 +18,7 @@ st.set_page_config(page_title="SketchForge Master", layout="centered")
 
 STYLES_DATA = [
     {"name": "Line Art", "icon": "🎨", "val": "clean line art"},
+    {"name": "Anime", "icon": "👧", "val": "professional anime manga line art, high-end ink"},
     {"name": "Zentangle", "icon": "🌸", "val": "zentangle patterns"},
     {"name": "Comic", "icon": "🗯️", "val": "comic book outlines"},
     {"name": "Mandala", "icon": "☸️", "val": "geometric mandala"},
@@ -56,7 +57,8 @@ def master_generate(prompt, styl, mode="bw", seed=None, audience="Dzieci", consi
         quality = (
             "8k resolution, ultra-high definition, hyper-detailed, masterpiece, award-winning art, "
             "incredibly rich composition, sharp focus, flawless clean outlines, professional grade, "
-            "no shading, no gradients, no fill color, white background, black contour lines, 300 DPI print quality"
+            "professional inking, high-end illustration, cinematic lighting, sharp edges, "
+            "300 DPI print quality, clean white background, solid black lines"
         )
         consistency = f"consistent character and composition with {consistency_context}," if consistency_context else ""
         
@@ -69,7 +71,7 @@ def master_generate(prompt, styl, mode="bw", seed=None, audience="Dzieci", consi
             complexity = (
                 "overwhelmingly detailed patterns, complex intricate designs, "
                 "professional high-end adult coloring book style, imaginative and whimsical, "
-                "extremely fine detail, sophisticated composition"
+                "extremely fine detail, sophisticated composition, manga-style professional line art"
             )
 
         if mode == "cover":
@@ -82,8 +84,8 @@ def master_generate(prompt, styl, mode="bw", seed=None, audience="Dzieci", consi
             arguments={
                 "prompt": final_p,
                 "seed": seed if seed is not None else random.randint(1, 99999999),
-                "num_inference_steps": 40,  # Zwiększone dla mega detali i czystości
-                "guidance_scale": 4.5,     # Zwiększone dla lepszej interpretacji bogatej wyobraźni
+                "num_inference_steps": 45,  # Jeszcze więcej kroków dla precyzji linii jak z obrazka
+                "guidance_scale": 5.0,     # Zwiększona skala dla maksymalnej wierności jakości
                 "width": 1024,
                 "height": 1024,
             },
@@ -105,11 +107,14 @@ def master_generate(prompt, styl, mode="bw", seed=None, audience="Dzieci", consi
 
 def to_contour_bw(image: Image.Image) -> Image.Image:
     gray = image.convert("L")
-    edges = gray.filter(ImageFilter.FIND_EDGES)
-    edges = ImageOps.autocontrast(edges, cutoff=2)
-    line = edges.point(lambda p: 0 if p > 24 else 255).convert("L")
-    line = line.filter(ImageFilter.MinFilter(3))
-    line = line.point(lambda p: 0 if p < 128 else 255).convert("L")
+    # Zoptymalizowana detekcja krawędzi dla jakości "Anime Masterpiece"
+    edges = gray.filter(ImageFilter.CONTOUR)
+    edges = ImageOps.autocontrast(edges, cutoff=1)
+    # Delikatniejsze progi, aby nie zgubić drobnych linii z referencji
+    line = edges.point(lambda p: 0 if p < 230 else 255).convert("L")
+    # Wygładzenie linii bez utraty ostrości
+    line = line.filter(ImageFilter.SMOOTH_MORE)
+    line = line.point(lambda p: 0 if p < 240 else 255).convert("L")
     return line.convert("RGB")
 
 
