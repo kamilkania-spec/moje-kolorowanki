@@ -1,6 +1,6 @@
 streamlit
 fal_client
-deep-translator
-Pillow
-reportlab
+deep_translator
+pillow
 requests
+reportlab
