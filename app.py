@@ -53,26 +53,37 @@ translator = get_translator()
 
 def master_generate(prompt, styl, mode="bw", seed=None, audience="Dzieci", consistency_context=None):
     try:
-        quality = "ultra clean outlines, no shading, no gradients, no fill color, white background, black contour lines, print quality"
-        consistency = f"consistent character and composition with {consistency_context}," if consistency_context else ""
-        complexity = (
-            "very simple large shapes thick outlines for kids"
-            if audience == "Dzieci"
-            else "intricate detailed contour drawing for adults"
+        quality = (
+            "8k resolution, ultra-high definition, hyper-detailed, masterpiece, award-winning art, "
+            "incredibly rich composition, sharp focus, flawless clean outlines, professional grade, "
+            "no shading, no gradients, no fill color, white background, black contour lines, 300 DPI print quality"
         )
+        consistency = f"consistent character and composition with {consistency_context}," if consistency_context else ""
+        
+        if audience == "Dzieci":
+            complexity = (
+                "rich whimsical shapes, professional bold clean lines for kids, "
+                "imaginative storybook style, large easy coloring areas, charming details"
+            )
+        else:
+            complexity = (
+                "overwhelmingly detailed patterns, complex intricate designs, "
+                "professional high-end adult coloring book style, imaginative and whimsical, "
+                "extremely fine detail, sophisticated composition"
+            )
 
         if mode == "cover":
-            final_p = f"{consistency} coloring book cover, {prompt}, {styl}, {quality}, {complexity}"
+            final_p = f"Professional 8k coloring book cover, {consistency} {prompt}, {styl}, {quality}, {complexity}"
         else:
-            final_p = f"{consistency} coloring page, {prompt}, {styl}, {quality}, {complexity}"
+            final_p = f"Professional 8k coloring page, {consistency} {prompt}, {styl}, {quality}, {complexity}"
 
         result = fal_client.run(
             "fal-ai/flux/dev",
             arguments={
                 "prompt": final_p,
                 "seed": seed if seed is not None else random.randint(1, 99999999),
-                "num_inference_steps": 35,
-                "guidance_scale": 4.0,
+                "num_inference_steps": 40,  # Zwiększone dla mega detali i czystości
+                "guidance_scale": 4.5,     # Zwiększone dla lepszej interpretacji bogatej wyobraźni
                 "width": 1024,
                 "height": 1024,
             },
