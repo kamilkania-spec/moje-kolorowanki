@@ -1,6 +1,7 @@
- streamlit
+streamlit
 fal-client
 deep-translator
 Pillow
 requests
 reportlab
+openai
