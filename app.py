@@ -17,13 +17,6 @@ from openai import OpenAI
 # iColoring Pro Engine Configuration
 os.environ["FAL_KEY"] = "cf0a6c98-7933-45df-918d-5757b24e9a30:afc267a3e94340879464bbea2862b40b"
 
-# Recraft AI Configuration (OpenAI Client)
-RECRAFT_API_TOKEN = os.getenv("RECRAFT_API_TOKEN", "your_recraft_token_here")
-recraft_client = OpenAI(
-    base_url='https://external.api.recraft.ai/v1',
-    api_key=RECRAFT_API_TOKEN,
-)
-
 st.set_page_config(
     page_title="iColoring Pro - Recraft Edition",
     page_icon="🖍️",
@@ -97,7 +90,12 @@ def icoloring_generate(prompt, style_config, mode="bw", audience="Dorośli", eng
 
         if engine == "Recraft V3":
             # Using Recraft V3 via OpenAI-compatible API
-            response = recraft_client.images.generate(
+            # Initialize client with current token from session state
+            current_recraft_client = OpenAI(
+                base_url='https://external.api.recraft.ai/v1',
+                api_key=st.session_state["recraft_token"],
+            )
+            response = current_recraft_client.images.generate(
                 model="recraft-v3",
                 prompt=final_prompt,
                 size="1024x1024",
@@ -153,6 +151,7 @@ STYLES_DATA = [
 if "basket" not in st.session_state: st.session_state["basket"] = []
 if "auth" not in st.session_state: st.session_state["auth"] = False
 if "selected_style" not in st.session_state: st.session_state["selected_style"] = STYLES_DATA[0]["name"]
+if "recraft_token" not in st.session_state: st.session_state["recraft_token"] = ""
 
 # --- LOGIN ---
 if not st.session_state["auth"]:
@@ -175,6 +174,17 @@ with st.sidebar:
         "🔍 Market Niche Finder",
         "⚙️ Advanced Settings"
     ])
+    st.divider()
+    
+    # API Key Management in Sidebar for easy access
+    st.subheader("🔑 API Keys")
+    st.session_state["recraft_token"] = st.text_input(
+        "Recraft API Token", 
+        value=st.session_state["recraft_token"], 
+        type="password",
+        help="Enter your Recraft API token here."
+    )
+    
     st.divider()
     st.write(f"📥 **Project Basket:** {len(st.session_state['basket'])} assets")
     if st.button("🗑️ Clear Workspace"):
@@ -217,8 +227,8 @@ if menu == "🎨 Creative Generator":
     if st.button("🚀 GENERATE MASTERPIECE", type="primary", use_container_width=True):
         if not user_prompt:
             st.warning("Please enter a description.")
-        elif RECRAFT_API_TOKEN == "your_recraft_token_here" and ai_engine == "Recraft V3":
-            st.error("Please set your RECRAFT_API_TOKEN in environment variables or code.")
+        elif not st.session_state["recraft_token"] and ai_engine == "Recraft V3":
+            st.error("Please enter your Recraft API Token in the sidebar to use this engine.")
         else:
             eng_prompt = translator.translate(user_prompt)
             style_cfg = next(s for s in STYLES_DATA if s["name"] == st.session_state["selected_style"])
