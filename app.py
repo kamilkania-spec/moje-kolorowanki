@@ -178,11 +178,12 @@ with st.sidebar:
     
     # API Key Management in Sidebar for easy access
     st.subheader("🔑 API Keys")
+    st.info("Wpisz swój token poniżej, aby używać modelu Recraft V3.")
     st.session_state["recraft_token"] = st.text_input(
         "Recraft API Token", 
         value=st.session_state["recraft_token"], 
         type="password",
-        help="Enter your Recraft API token here."
+        placeholder="Tu wklej token..."
     )
     
     st.divider()
@@ -206,7 +207,7 @@ if menu == "🎨 Creative Generator":
         user_prompt = st.text_area("Describe your masterpiece...", placeholder="e.g. A majestic lion with a crown of flowers...", height=120)
     with col2:
         st.write("**Generation Engine**")
-        ai_engine = st.selectbox("Model", ["Recraft V3", "Flux Pro v1.1"])
+        ai_engine = st.selectbox("Model", ["Flux Pro v1.1", "Recraft V3"], help="Recraft V3 wymaga własnego tokenu API.")
         st.write("**Target Audience**")
         audience = st.segmented_control("Audience", ["Dzieci", "Dorośli"], default="Dorośli")
         mode = st.radio("Output Format", ["BW Contours", "Full Color Cover"], horizontal=True)
