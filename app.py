@@ -11,12 +11,21 @@ from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
+from openai import OpenAI
 
-# --- iColoring Pro Engine Configuration ---
+# --- Studio Configuration ---
+# iColoring Pro Engine Configuration
 os.environ["FAL_KEY"] = "cf0a6c98-7933-45df-918d-5757b24e9a30:afc267a3e94340879464bbea2862b40b"
 
+# Recraft AI Configuration (OpenAI Client)
+RECRAFT_API_TOKEN = os.getenv("RECRAFT_API_TOKEN", "your_recraft_token_here")
+recraft_client = OpenAI(
+    base_url='https://external.api.recraft.ai/v1',
+    api_key=RECRAFT_API_TOKEN,
+)
+
 st.set_page_config(
-    page_title="iColoring Pro - Advanced AI Studio",
+    page_title="iColoring Pro - Recraft Edition",
     page_icon="🖍️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -68,8 +77,8 @@ def get_translator():
 
 translator = get_translator()
 
-# --- iColoring Master Engine (FLUX PRO V1.1 Integration) ---
-def icoloring_generate(prompt, style_config, mode="bw", audience="Dorośli"):
+# --- iColoring Master Engine (Recraft V3 Integration) ---
+def icoloring_generate(prompt, style_config, mode="bw", audience="Dorośli", engine="Recraft V3"):
     try:
         # iColoring Secret Sauce: Multi-layer prompt engineering
         quality_prompt = (
@@ -86,22 +95,30 @@ def icoloring_generate(prompt, style_config, mode="bw", audience="Dorośli"):
 
         final_prompt = f"{style_config['val']}, {prompt}, {quality_prompt}, {audience_modifier}"
 
-        # Using FLUX PRO for top-tier market quality
-        result = fal_client.run(
-            "fal-ai/flux-pro/v1.1", # Przełączenie na model PRO dla najwyższej jakości
-            arguments={
-                "prompt": final_prompt,
-                "width": 1024,
-                "height": 1024,
-                "prompt_upsampling": True, # AI ulepsza prompt dla lepszych detali
-                "safety_tolerance": "5"
-            },
-        )
+        if engine == "Recraft V3":
+            # Using Recraft V3 via OpenAI-compatible API
+            response = recraft_client.images.generate(
+                model="recraft-v3",
+                prompt=final_prompt,
+                size="1024x1024",
+                n=1,
+            )
+            url = response.data[0].url
+        else:
+            # Fallback to FLUX PRO
+            result = fal_client.run(
+                "fal-ai/flux-pro/v1.1",
+                arguments={
+                    "prompt": final_prompt,
+                    "width": 1024,
+                    "height": 1024,
+                    "prompt_upsampling": True,
+                    "safety_tolerance": "5"
+                },
+            )
+            if not result or "images" not in result: return None
+            url = result["images"][0]["url"]
 
-        if not result or "images" not in result:
-            return None
-
-        url = result["images"][0]["url"]
         img = Image.open(BytesIO(requests.get(url, timeout=60).content)).convert("RGB")
 
         if mode == "bw":
@@ -151,7 +168,7 @@ if not st.session_state["auth"]:
 
 # --- SIDEBAR: iColoring Pro Tools ---
 with st.sidebar:
-    st.title("�️ iColoring Pro")
+    st.title("🖍️ iColoring Pro")
     menu = st.radio("STUDIO MODULES", [
         "🎨 Creative Generator",
         "📚 Series & Story Engine",
@@ -178,6 +195,8 @@ if menu == "🎨 Creative Generator":
         st.write("**Vision Description**")
         user_prompt = st.text_area("Describe your masterpiece...", placeholder="e.g. A majestic lion with a crown of flowers...", height=120)
     with col2:
+        st.write("**Generation Engine**")
+        ai_engine = st.selectbox("Model", ["Recraft V3", "Flux Pro v1.1"])
         st.write("**Target Audience**")
         audience = st.segmented_control("Audience", ["Dzieci", "Dorośli"], default="Dorośli")
         mode = st.radio("Output Format", ["BW Contours", "Full Color Cover"], horizontal=True)
@@ -195,19 +214,22 @@ if menu == "🎨 Creative Generator":
 
     amount = st.slider("Number of Variations", 1, 10, 1)
     
-    if st.button("🚀 GENERATE iCOLORING QUALITY", type="primary", use_container_width=True):
+    if st.button("🚀 GENERATE MASTERPIECE", type="primary", use_container_width=True):
         if not user_prompt:
             st.warning("Please enter a description.")
+        elif RECRAFT_API_TOKEN == "your_recraft_token_here" and ai_engine == "Recraft V3":
+            st.error("Please set your RECRAFT_API_TOKEN in environment variables or code.")
         else:
             eng_prompt = translator.translate(user_prompt)
             style_cfg = next(s for s in STYLES_DATA if s["name"] == st.session_state["selected_style"])
             
             res_cols = st.columns(2)
             for i in range(amount):
-                with st.spinner(f"Rendering Asset {i+1}..."):
+                with st.spinner(f"Rendering Asset {i+1} via {ai_engine}..."):
                     img = icoloring_generate(eng_prompt, style_cfg, 
                                            mode="bw" if "BW" in mode else "color", 
-                                           audience=audience)
+                                           audience=audience,
+                                           engine=ai_engine)
                     if img:
                         res_cols[i % 2].image(img, use_container_width=True)
                         buf = BytesIO()
@@ -232,6 +254,6 @@ if st.session_state["basket"]:
             c.showPage()
         c.save()
         
-        st.download_button("� DOWNLOAD KDP READY PDF", out.getvalue(), 
+        st.download_button("📥 DOWNLOAD KDP READY PDF", out.getvalue(), 
                          "icoloring_pro_project.pdf", "application/pdf", 
                          use_container_width=True)
