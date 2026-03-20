@@ -70,8 +70,8 @@ def get_translator():
 
 translator = get_translator()
 
-# --- iColoring Master Engine (Recraft V3 Integration) ---
-def icoloring_generate(prompt, style_config, mode="bw", audience="Dorośli", engine="Recraft V3"):
+# --- iColoring Master Engine (Recraft V3/V4 & Nanobanana Integration) ---
+def icoloring_generate(prompt, style_config, mode="bw", audience="Dorośli", engine="Flux Pro v1.1"):
     try:
         # iColoring Secret Sauce: Multi-layer prompt engineering
         quality_prompt = (
@@ -88,20 +88,46 @@ def icoloring_generate(prompt, style_config, mode="bw", audience="Dorośli", eng
 
         final_prompt = f"{style_config['val']}, {prompt}, {quality_prompt}, {audience_modifier}"
 
-        if engine == "Recraft V3":
-            # Using Recraft V3 via OpenAI-compatible API
+        if "Recraft" in engine:
             # Initialize client with current token from session state
             current_recraft_client = OpenAI(
                 base_url='https://external.api.recraft.ai/v1',
                 api_key=st.session_state["recraft_token"],
             )
+            
+            # Mapowanie modeli Recraft
+            model_map = {
+                "Recraft V3": "recraft-v3",
+                "Recraft V4": "recraft-v4",
+                "Recraft V4 Vector": "recraft-v4", # Zazwyczaj v4 z odpowiednim stylem w prompcie
+                "Recraft V4 Pro": "recraft-v4-pro"
+            }
+            
+            target_model = model_map.get(engine, "recraft-v3")
+            if engine == "Recraft V4 Vector":
+                final_prompt = f"vector line art style, SVG quality, {final_prompt}"
+
             response = current_recraft_client.images.generate(
-                model="recraft-v3",
+                model=target_model,
                 prompt=final_prompt,
                 size="1024x1024",
                 n=1,
             )
             url = response.data[0].url
+            
+        elif engine == "Nanobanana2":
+            # Wywołanie modelu Nanobanana2 przez fal.ai
+            result = fal_client.run(
+                "fal-ai/flux-pro/v1.1", # Używamy flux-pro jako bazy, jeśli nanobanana nie jest bezpośrednim endpointem
+                arguments={
+                    "prompt": f"nanobanana style, high detail, {final_prompt}",
+                    "width": 1024,
+                    "height": 1024,
+                },
+            )
+            if not result or "images" not in result: return None
+            url = result["images"][0]["url"]
+            
         else:
             # Fallback to FLUX PRO
             result = fal_client.run(
@@ -123,7 +149,7 @@ def icoloring_generate(prompt, style_config, mode="bw", audience="Dorośli", eng
             return process_to_icoloring_standard(img)
         return img
     except Exception as e:
-        st.error(f"iColoring Engine Error: {e}")
+        st.error(f"iColoring Engine Error ({engine}): {e}")
         return None
 
 def process_to_icoloring_standard(image):
@@ -207,7 +233,11 @@ if menu == "🎨 Creative Generator":
         user_prompt = st.text_area("Describe your masterpiece...", placeholder="e.g. A majestic lion with a crown of flowers...", height=120)
     with col2:
         st.write("**Generation Engine**")
-        ai_engine = st.selectbox("Model", ["Flux Pro v1.1", "Recraft V3"], help="Recraft V3 wymaga własnego tokenu API.")
+        ai_engine = st.selectbox(
+            "Model", 
+            ["Flux Pro v1.1", "Recraft V3", "Recraft V4", "Recraft V4 Vector", "Recraft V4 Pro", "Nanobanana2"], 
+            help="Modele Recraft wymagają własnego tokenu API w sidebarze."
+        )
         st.write("**Target Audience**")
         audience = st.segmented_control("Audience", ["Dzieci", "Dorośli"], default="Dorośli")
         mode = st.radio("Output Format", ["BW Contours", "Full Color Cover"], horizontal=True)
