@@ -89,31 +89,48 @@ def icoloring_generate(prompt, style_config, mode="bw", audience="Dorośli", eng
         final_prompt = f"{style_config['val']}, {prompt}, {quality_prompt}, {audience_modifier}"
 
         if "Recraft" in engine:
+            # Clean token from whitespace to avoid authorization errors
+            clean_token = st.session_state["recraft_token"].strip()
+            
+            if not clean_token:
+                st.error("Błąd: Token Recraft jest pusty! Wpisz go w sidebarze.")
+                return None
+
             # Initialize client with current token from session state
             current_recraft_client = OpenAI(
                 base_url='https://external.api.recraft.ai/v1',
-                api_key=st.session_state["recraft_token"],
+                api_key=clean_token,
             )
             
-            # Mapowanie modeli Recraft
+            # Mapowanie modeli Recraft (zgodnie z oficjalną dokumentacją)
             model_map = {
                 "Recraft V3": "recraft-v3",
                 "Recraft V4": "recraft-v4",
-                "Recraft V4 Vector": "recraft-v4", # Zazwyczaj v4 z odpowiednim stylem w prompcie
-                "Recraft V4 Pro": "recraft-v4-pro"
+                "Recraft V4 Vector": "recraft-v4", 
+                "Recraft V4 Pro": "recraft-v4" # Pro zazwyczaj wybierane przez parametry lub model-v4
             }
             
             target_model = model_map.get(engine, "recraft-v3")
+            
+            # Specjalne traktowanie dla Vector
+            extra_args = {}
             if engine == "Recraft V4 Vector":
-                final_prompt = f"vector line art style, SVG quality, {final_prompt}"
-
-            response = current_recraft_client.images.generate(
-                model=target_model,
-                prompt=final_prompt,
-                size="1024x1024",
-                n=1,
-            )
-            url = response.data[0].url
+                final_prompt = f"VECTOR LINE ART, clean contours, SVG style, {final_prompt}"
+            
+            try:
+                response = current_recraft_client.images.generate(
+                    model=target_model,
+                    prompt=final_prompt,
+                    size="1024x1024",
+                    n=1,
+                )
+                url = response.data[0].url
+            except Exception as api_err:
+                if "unauthorized" in str(api_err).lower():
+                    st.error("❌ Błąd autoryzacji: Twój token Recraft jest nieprawidłowy lub wygasł.")
+                else:
+                    st.error(f"❌ Błąd API Recraft: {api_err}")
+                return None
             
         elif engine == "Nanobanana2":
             # Wywołanie modelu Nanobanana2 przez fal.ai
