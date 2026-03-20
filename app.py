@@ -220,14 +220,19 @@ with st.sidebar:
     st.divider()
     
     # API Key Management in Sidebar for easy access
-    st.subheader("🔑 API Keys")
-    st.info("Wpisz swój token poniżej, aby używać modelu Recraft V3.")
+    st.subheader("🔑 Konfiguracja API")
+    if not st.session_state["recraft_token"]:
+        st.warning("⚠️ Brak tokenu Recraft!")
+    else:
+        st.success("✅ Token Recraft załadowany")
+        
     st.session_state["recraft_token"] = st.text_input(
-        "Recraft API Token", 
+        "Wklej Recraft API Token tutaj:", 
         value=st.session_state["recraft_token"], 
         type="password",
-        placeholder="Tu wklej token..."
+        placeholder="sk-rc-..."
     )
+    st.caption("Token znajdziesz w ustawieniach konta na recraft.ai")
     
     st.divider()
     st.write(f"📥 **Project Basket:** {len(st.session_state['basket'])} assets")
@@ -275,8 +280,8 @@ if menu == "🎨 Creative Generator":
     if st.button("🚀 GENERATE MASTERPIECE", type="primary", use_container_width=True):
         if not user_prompt:
             st.warning("Please enter a description.")
-        elif not st.session_state["recraft_token"] and ai_engine == "Recraft V3":
-            st.error("Please enter your Recraft API Token in the sidebar to use this engine.")
+        elif not st.session_state["recraft_token"] and "Recraft" in ai_engine:
+            st.error("❌ Błąd: Wybrałeś model Recraft, ale nie wpisałeś tokenu API w sidebarze po lewej stronie!")
         else:
             eng_prompt = translator.translate(user_prompt)
             style_cfg = next(s for s in STYLES_DATA if s["name"] == st.session_state["selected_style"])
